@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>天命系统 | AI传统文化与心理咨询助手</title>
+  <meta name="description" content="AI 命理 · 传统文化 · 心理咨询助手，探索您的命运轨迹" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1F1F1F">
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="天命系统">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@300;400;600;700&family=Zhi+Mang+Xing&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --color-cinnabar: #8B0000;
+      --color-gold: #B8860B;
+      --color-paper: #F7F7F5;
+      --color-ink: #1F1F1F;
+    }
+
+    body {
+      background-color: var(--color-paper);
+      color: var(--color-ink);
+      font-family: 'Noto Serif SC', serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    .font-serif {
+      font-family: 'Noto Serif SC', serif;
+    }
+
+    .font-calligraphy {
+      font-family: 'Zhi Mang Xing', cursive;
+    }
+
+    /* Mobile: disable double-tap zoom, improve tap responsiveness */
+    * {
+      touch-action: manipulation;
+    }
+
+    /* Utilities */
+    .pb-safe {
+      padding-bottom: env(safe-area-inset-bottom, 16px);
+    }
+
+    .pt-safe {
+      padding-top: env(safe-area-inset-top, 0px);
+    }
+
+    .mb-safe {
+      margin-bottom: env(safe-area-inset-bottom, 16px);
+    }
+
+    /* Smooth scroll on iOS */
+    * {
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Prevent text size adjustment on orientation change */
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
+    /* Custom Scrollbar (desktop only) */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #D1D1C6;
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--color-gold);
+    }
+
+    /* Tap highlight color */
+    * {
+      -webkit-tap-highlight-color: rgba(184, 134, 11, 0.1);
+    }
+
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    /* Loading Screen Animation */
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #F7F7F5;
+      z-index: 9999;
+      transition: opacity 0.5s ease;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(184, 134, 11, 0.2);
+      border-top-color: #B8860B;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    #root:not(:empty)+#loading-screen {
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+  <div id="loading-screen">
+    <div class="spinner"></div>
+    <div style="font-family: 'Zhi Mang Xing', cursive; font-size: 28px; color: #1F1F1F;">天命</div>
+    <div style="font-size: 12px; color: #888; margin-top: 8px; font-family: 'Noto Serif SC', serif;">系统启动中...</div>
+  </div>
+  <script type="module" src="/index.tsx"></script>
+  <script>
+    // Register Service Worker for PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('[SW] Registered:', reg.scope))
+          .catch(err => console.warn('[SW] Registration failed:', err));
+      });
+    }
+  </script></body>
+
+</html>
