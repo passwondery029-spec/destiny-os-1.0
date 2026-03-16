@@ -529,10 +529,12 @@ app.post('/api/dify/report', async (req, res) => {
           },
           body: JSON.stringify({
             inputs: {
-              profile,
-              memories,
-              reportType,
-              customTopic
+              bazi_input: JSON.stringify({
+                profile,
+                memories,
+                reportType,
+                customTopic
+              })
             },
             response_mode: 'blocking',
             user: profile?.id || 'anonymous'
