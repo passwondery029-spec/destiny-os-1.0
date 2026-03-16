@@ -18,6 +18,6 @@ ARK_ENDPOINT_ID=your_ark_endpoint_id_here
 # 如果配置了此项，系统将不再使用内置大模型生成报告，而是将请求转发给该 URL。
 # ==========================================
 # 你的专属 Agent Webhook API 地址
-# EXTERNAL_REPORT_AGENT_URL=https://your-dify-agent-url.com
+# EXTERNAL_REPORT_AGENT_URL=https://whhongyi.com.cn/v1
 # 你的专属 Agent API Key (如果需要)
 # EXTERNAL_REPORT_AGENT_KEY=your_api_key_here
