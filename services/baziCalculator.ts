@@ -177,7 +177,9 @@ export function calculateDailyFortune(bazi: BaziData, targetDate: Date = new Dat
 
   // 生成各维度分数（围绕综合分数波动）
   const generateDimensionScore = (offset: number) => {
-    return Math.max(0, Math.min(100, Math.round(overallScore + offset + ((seed * offset) % 30) - 15));
+    const fluctuation = ((seed * offset) % 30) - 15;
+    const rawScore = overallScore + offset + fluctuation;
+    return Math.max(0, Math.min(100, Math.round(rawScore)));
   };
 
   const careerScore = generateDimensionScore(5);
@@ -211,7 +213,8 @@ export function calculateDailyFortune(bazi: BaziData, targetDate: Date = new Dat
   // 生成全年12个月的运势数据
   const monthlyData = Array.from({ length: 12 }, (_, i) => {
     const monthSeed = dayOfYear + (i + 1) * 100;
-    const monthScore = Math.max(30, Math.min(100, Math.round(60 + ((monthSeed % 80) - 40))));
+    const fluctuation = (monthSeed % 80) - 40;
+    const monthScore = Math.max(30, Math.min(100, Math.round(60 + fluctuation)));
     return { month: i + 1, score: monthScore };
   });
 
