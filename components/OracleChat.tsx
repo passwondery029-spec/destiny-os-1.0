@@ -145,9 +145,9 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
     // Handle Initial Prompt (Deep link from Dashboard)
     useEffect(() => {
-        // 只有当历史加载完成（isLoadingHistory 为 false）且有消息时，才处理 initialPrompt
-        if (initialPrompt && !hasProcessedPrompt.current && !isLoadingHistory && messages.length > 0) {
-            console.log('[OracleChat] Processing initialPrompt:', initialPrompt.substring(0, 50) + '...');
+        // 必须等 activeProfile 加载完、历史加载完，才处理 initialPrompt
+        if (initialPrompt && !hasProcessedPrompt.current && !isLoadingHistory && activeProfile && messages.length > 0) {
+            console.log('[OracleChat] Processing initialPrompt, activeProfile:', activeProfile.name);
             hasProcessedPrompt.current = true;
             
             // 添加一个专门的提示消息让用户知道正在生成报告
@@ -168,7 +168,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                 onPromptConsumed();
             }
         }
-    }, [initialPrompt, isLoadingHistory, messages.length]);
+    }, [initialPrompt, isLoadingHistory, activeProfile, messages.length]);
 
     const handleSendMessage = async (text: string) => {
         const userMsg: ChatMessage = {
