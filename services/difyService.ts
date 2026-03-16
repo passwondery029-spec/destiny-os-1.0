@@ -33,7 +33,7 @@ export const generateReportWithDify = async (
   profile: UserProfile,
   reportType: string,
   customTopic?: string
-): Promise&lt;DifyReportResponse&gt; =&gt; {
+): Promise<DifyReportResponse> => {
   try {
     // 获取用户的记忆碎片
     const memories = await getContextString(profile.id || 'self');
@@ -77,8 +77,8 @@ export const generateMockReport = (
   profile: UserProfile,
   reportType: string,
   customTopic?: string
-): DifyReportResponse =&gt; {
-  const typeNames: Record&lt;string, string&gt; = {
+): DifyReportResponse => {
+  const typeNames: Record<string, string> = {
     'YEARLY': '2025流年运势',
     'CAREER': '事业前程详批',
     'WEALTH': '财库补全指引',
@@ -93,82 +93,82 @@ export const generateMockReport = (
 
   // 模拟 HTML 报告内容
   const htmlContent = `
-&lt;div style="font-family: 'Georgia', serif; max-width: 800px; margin: 0 auto; padding: 40px 20px;"&gt;
-  &lt;div style="text-align: center; margin-bottom: 40px; padding-bottom: 30px; border-bottom: 2px solid #B8860B;"&gt;
-    &lt;h1 style="font-size: 32px; color: #1F1F1F; margin-bottom: 10px;"&gt;${reportTitle}&lt;/h1&gt;
-    &lt;p style="color: #666; font-size: 14px;"&gt;生成时间：${new Date().toLocaleString('zh-CN')}&lt;/p&gt;
-  &lt;/div&gt;
+<div style="font-family: 'Georgia', serif; max-width: 800px; margin: 0 auto; padding: 40px 20px;">
+  <div style="text-align: center; margin-bottom: 40px; padding-bottom: 30px; border-bottom: 2px solid #B8860B;">
+    <h1 style="font-size: 32px; color: #1F1F1F; margin-bottom: 10px;">${reportTitle}</h1>
+    <p style="color: #666; font-size: 14px;">生成时间：${new Date().toLocaleString('zh-CN')}</p>
+  </div>
 
-  &lt;div style="background: #F7F7F5; padding: 30px; border-radius: 12px; margin-bottom: 30px;"&gt;
-    &lt;h2 style="color: #8B0000; font-size: 18px; margin-bottom: 15px;"&gt;核心断语&lt;/h2&gt;
-    &lt;p style="font-size: 18px; line-height: 1.8; color: #333; font-style: italic;"&gt;${summary}&lt;/p&gt;
-  &lt;/div&gt;
+  <div style="background: #F7F7F5; padding: 30px; border-radius: 12px; margin-bottom: 30px;">
+    <h2 style="color: #8B0000; font-size: 18px; margin-bottom: 15px;">核心断语</h2>
+    <p style="font-size: 18px; line-height: 1.8; color: #333; font-style: italic;">${summary}</p>
+  </div>
 
-  &lt;div style="margin-bottom: 30px;"&gt;
-    &lt;h2 style="color: #1F1F1F; font-size: 20px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;"&gt;
-      &lt;span style="color: #B8860B;"&gt;▲&lt;/span&gt; 个人档案
-    &lt;/h2&gt;
-    &lt;div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;"&gt;
-      &lt;div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee;"&gt;
-        &lt;div style="color: #666; font-size: 12px; margin-bottom: 5px;"&gt;姓名&lt;/div&gt;
-        &lt;div style="color: #1F1F1F; font-size: 16px; font-weight: bold;"&gt;${profile.name}&lt;/div&gt;
-      &lt;/div&gt;
-      &lt;div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee;"&gt;
-        &lt;div style="color: #666; font-size: 12px; margin-bottom: 5px;"&gt;出生日期&lt;/div&gt;
-        &lt;div style="color: #1F1F1F; font-size: 16px; font-weight: bold;"&gt;${profile.birthDate} ${profile.birthTime}&lt;/div&gt;
-      &lt;/div&gt;
+  <div style="margin-bottom: 30px;">
+    <h2 style="color: #1F1F1F; font-size: 20px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
+      <span style="color: #B8860B;">▲</span> 个人档案
+    </h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+      <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
+        <div style="color: #666; font-size: 12px; margin-bottom: 5px;">姓名</div>
+        <div style="color: #1F1F1F; font-size: 16px; font-weight: bold;">${profile.name}</div>
+      </div>
+      <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
+        <div style="color: #666; font-size: 12px; margin-bottom: 5px;">出生日期</div>
+        <div style="color: #1F1F1F; font-size: 16px; font-weight: bold;">${profile.birthDate} ${profile.birthTime}</div>
+      </div>
       ${profile.bazi ? `
-      &lt;div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee;"&gt;
-        &lt;div style="color: #666; font-size: 12px; margin-bottom: 5px;"&gt;八字排盘&lt;/div&gt;
-        &lt;div style="color: #1F1F1F; font-size: 16px; font-weight: bold;"&gt;${profile.bazi}&lt;/div&gt;
-      &lt;/div&gt;
+      <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
+        <div style="color: #666; font-size: 12px; margin-bottom: 5px;">八字排盘</div>
+        <div style="color: #1F1F1F; font-size: 16px; font-weight: bold;">${profile.bazi}</div>
+      </div>
       ` : ''}
-    &lt;/div&gt;
-  &lt;/div&gt;
+    </div>
+  </div>
 
-  &lt;div style="margin-bottom: 30px;"&gt;
-    &lt;h2 style="color: #1F1F1F; font-size: 20px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;"&gt;
-      &lt;span style="color: #8B0000;"&gt;●&lt;/span&gt; ${typeNames[reportType] || '深度分析'}
-    &lt;/h2&gt;
-    &lt;div style="line-height: 2; color: #333; font-size: 16px;"&gt;
-      &lt;p style="margin-bottom: 20px;"&gt;
-        &lt;strong style="color: #1F1F1F;"&gt;【运势总论】&lt;/strong&gt;&lt;br /&gt;
+  <div style="margin-bottom: 30px;">
+    <h2 style="color: #1F1F1F; font-size: 20px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
+      <span style="color: #8B0000;">●</span> ${typeNames[reportType] || '深度分析'}
+    </h2>
+    <div style="line-height: 2; color: #333; font-size: 16px;">
+      <p style="margin-bottom: 20px;">
+        <strong style="color: #1F1F1F;">【运势总论】</strong><br />
         基于您的命盘分析，${profile.name}的${typeNames[reportType] || '整体运势'}呈现${reportType === 'YEARLY' ? '上升发展' : reportType === 'CAREER' ? '稳步推进' : reportType === 'WEALTH' ? '稳健积累' : '积极向上'}的态势。
-      &lt;/p&gt;
-      &lt;p style="margin-bottom: 20px;"&gt;
-        &lt;strong style="color: #B8860B;"&gt;【关键提示】&lt;/strong&gt;&lt;br /&gt;
+      </p>
+      <p style="margin-bottom: 20px;">
+        <strong style="color: #B8860B;">【关键提示】</strong><br />
         建议把握${reportType === 'YEARLY' ? '年中' : reportType === 'CAREER' ? '季度转换' : reportType === 'WEALTH' ? '财务规划' : '关键'}时期的机遇，保持积极心态，避免急躁冒进。
-      &lt;/p&gt;
-      &lt;p style="margin-bottom: 20px;"&gt;
-        &lt;strong style="color: #8B0000;"&gt;【行动建议】&lt;/strong&gt;&lt;br /&gt;
-        1. 保持规律作息，养护身心&lt;br /&gt;
-        2. 定期复盘，调整策略&lt;br /&gt;
-        3. 广结善缘，把握机遇&lt;br /&gt;
+      </p>
+      <p style="margin-bottom: 20px;">
+        <strong style="color: #8B0000;">【行动建议】</strong><br />
+        1. 保持规律作息，养护身心<br />
+        2. 定期复盘，调整策略<br />
+        3. 广结善缘，把握机遇<br />
         4. 稳健行事，避免冒险
-      &lt;/p&gt;
-    &lt;/div&gt;
-  &lt;/div&gt;
+      </p>
+    </div>
+  </div>
 
   ${customTopic ? `
-  &lt;div style="margin-bottom: 30px;"&gt;
-    &lt;h2 style="color: #1F1F1F; font-size: 20px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;"&gt;
-      &lt;span style="color: #B8860B;"&gt;★&lt;/span&gt; 定制主题分析
-    &lt;/h2&gt;
-    &lt;div style="background: linear-gradient(135deg, #F7F7F5 0%, #fff 100%); padding: 25px; border-radius: 12px; border-left: 4px solid #B8860B;"&gt;
-      &lt;div style="color: #666; font-size: 12px; margin-bottom: 10px;"&gt;定制主题&lt;/div&gt;
-      &lt;div style="color: #1F1F1F; font-size: 18px; font-weight: bold; margin-bottom: 15px;"&gt;${customTopic}&lt;/div&gt;
-      &lt;div style="color: #333; line-height: 1.8;"&gt;
+  <div style="margin-bottom: 30px;">
+    <h2 style="color: #1F1F1F; font-size: 20px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
+      <span style="color: #B8860B;">★</span> 定制主题分析
+    </h2>
+    <div style="background: linear-gradient(135deg, #F7F7F5 0%, #fff 100%); padding: 25px; border-radius: 12px; border-left: 4px solid #B8860B;">
+      <div style="color: #666; font-size: 12px; margin-bottom: 10px;">定制主题</div>
+      <div style="color: #1F1F1F; font-size: 18px; font-weight: bold; margin-bottom: 15px;">${customTopic}</div>
+      <div style="color: #333; line-height: 1.8;">
         针对您定制的主题"${customTopic}"，结合您的命盘和记忆档案，为您提供深度分析和具体建议。在接下来的日子里，建议您关注相关领域的变化，保持开放心态，积极应对各种可能性。
-      &lt;/div&gt;
-    &lt;/div&gt;
-  &lt;/div&gt;
+      </div>
+    </div>
+  </div>
   ` : ''}
 
-  &lt;div style="text-align: center; padding-top: 30px; border-top: 1px solid #eee; color: #999; font-size: 12px;"&gt;
-    &lt;p&gt;本报告仅供娱乐与文化研究，不依据科学标准，不应作为重大生活决策的依据。&lt;/p&gt;
-    &lt;p&gt;请用户相信科学，拒绝迷信。&lt;/p&gt;
-  &lt;/div&gt;
-&lt;/div&gt;
+  <div style="text-align: center; padding-top: 30px; border-top: 1px solid #eee; color: #999; font-size: 12px;">
+    <p>本报告仅供娱乐与文化研究，不依据科学标准，不应作为重大生活决策的依据。</p>
+    <p>请用户相信科学，拒绝迷信。</p>
+  </div>
+</div>
   `;
 
   return {

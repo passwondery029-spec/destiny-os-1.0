@@ -6,7 +6,7 @@ import { supabase } from './supabaseClient';
 
 const STORAGE_KEY = 'destiny_os_reports';
 
-const getLocalReports = (): DestinyReport[] =&gt; {
+const getLocalReports = (): DestinyReport[] => {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
     // Initialize with mock data if empty
@@ -16,7 +16,7 @@ const getLocalReports = (): DestinyReport[] =&gt; {
   return JSON.parse(stored);
 };
 
-export const getReports = async (): Promise&lt;DestinyReport[]&gt; =&gt; {
+export const getReports = async (): Promise<DestinyReport[]> => {
   try {
     const { data, error } = await supabase
       .from('reports')
@@ -26,8 +26,8 @@ export const getReports = async (): Promise&lt;DestinyReport[]&gt; =&gt; {
     if (error) throw error;
 
     // Convert snake_case from DB to camelCase for frontend
-    if (data &amp;&amp; data.length &gt; 0) {
-      return data.map(r =&gt; {
+    if (data && data.length > 0) {
+      return data.map(r => {
         let parsedSummary = r.summary;
         let parsedContent = r.content || '';
         let parsedHtmlContent: string | undefined;
@@ -75,7 +75,7 @@ export const addReport = async (
   content?: string,
   htmlContent?: string,
   cost?: number
-): Promise&lt;DestinyReport&gt; =&gt; {
+): Promise<DestinyReport> => {
   const newReport: DestinyReport = {
     id: uuidv4(),
     profileId,
@@ -125,7 +125,7 @@ export const addReport = async (
   return newReport;
 };
 
-export const deleteReport = async (id: string): Promise&lt;void&gt; =&gt; {
+export const deleteReport = async (id: string): Promise<void> => {
   try {
     const { error } = await supabase
       .from('reports')
@@ -137,7 +137,7 @@ export const deleteReport = async (id: string): Promise&lt;void&gt; =&gt; {
     console.error('Error deleting report from Supabase:', error);
     // Fallback to local storage
     const reports = getLocalReports();
-    const updated = reports.filter(r =&gt; r.id !== id);
+    const updated = reports.filter(r => r.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   }
 };

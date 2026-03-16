@@ -157,21 +157,21 @@ const ReportPage: React.FC<ReportPageProps> = ({ report, onBack }) => {
 
                     {/* 如果有 HTML 内容，优先渲染 HTML；否则渲染 Markdown */}
                     {report.htmlContent ? (
-                        &lt;div 
+                        <div 
                             className={`max-w-none font-serif leading-loose ${isKLine ? 'text-[#F7F7F5]' : 'text-stone-800'}`}
                             dangerouslySetInnerHTML={{ __html: report.htmlContent }}
-                        /&gt;
+                        />
                     ) : (
-                        &lt;div className={`prose prose-lg max-w-none font-serif leading-loose ${isKLine ? 'prose-invert' : ''}`} ref={markdownRef}&gt;
-                            &lt;Markdown
+                        <div className={`prose prose-lg max-w-none font-serif leading-loose ${isKLine ? 'prose-invert' : ''}`} ref={markdownRef}>
+                            <Markdown
                                 remarkPlugins={[remarkGfm]}
                                 rehypePlugins={[rehypeRaw]}
-                            &gt;
+                            >
                                 {report.content || ""}
-                            &lt;/Markdown&gt;
-                        &lt;/div&gt;
+                            </Markdown>
+                        </div>
                     )}
-                &lt;/div&gt;
+                </div>
 
                 {/* Tags */}
                 <div className="flex flex-wrap gap-2 pt-10 border-t border-stone-100/10">
