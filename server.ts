@@ -83,7 +83,7 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages, systemInstruction, temperature, profileId, userId, levelConfig } = req.body;
+    const { messages, systemInstruction, temperature, profileId, userId, levelConfig, displayText } = req.body;
     const client = getArkClient();
 
     const apiMessages = [];
@@ -106,19 +106,26 @@ app.post('/api/chat', async (req, res) => {
     }
 
     // Save to database as chat history for memory extraction later
+    // 使用 supabaseAdmin（绕过 RLS），fallback 到 supabase
+    const dbClient = supabaseAdmin || supabase;
     if (profileId) {
       const lastUserMessage = messages[messages.length - 1]; // Only the latest sent by user
       if (lastUserMessage && lastUserMessage.role === 'user') {
         try {
-          await supabase.from('chat_logs').insert([{
+          // 如果有 displayText，存简洁的展示文本（避免把完整 prompt 暴露给用户）
+          const textToSave = displayText || lastUserMessage.content;
+          const { error: insertErr } = await dbClient.from('chat_logs').insert([{
             profile_id: profileId,
-            user_id: userId, // Added for RLS
+            user_id: userId,
             role: 'user',
-            text: lastUserMessage.content,
+            text: textToSave,
             timestamp: Date.now()
           }]);
+          if (insertErr) {
+            console.error('[DB] Failed to save user chat log:', insertErr.message);
+          }
         } catch (dbErr) {
-          console.error('Failed to save user chat log:', dbErr);
+          console.error('[DB] Exception saving user chat log:', dbErr);
         }
       }
     }
@@ -154,15 +161,18 @@ app.post('/api/chat', async (req, res) => {
     // Save AI reply to database
     if (profileId && replyText) {
       try {
-        await supabase.from('chat_logs').insert([{
+        const { error: replyErr } = await dbClient.from('chat_logs').insert([{
           profile_id: profileId,
-          user_id: userId, // Added for RLS
+          user_id: userId,
           role: 'model',
           text: replyText,
           timestamp: Date.now()
         }]);
+        if (replyErr) {
+          console.error('[DB] Failed to save AI reply:', replyErr.message);
+        }
       } catch (dbErr) {
-        console.error('Failed to save model chat log:', dbErr);
+        console.error('[DB] Exception saving AI reply:', dbErr);
       }
     }
 

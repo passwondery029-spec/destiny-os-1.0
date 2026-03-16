@@ -32,7 +32,8 @@ export const initializeChat = async (profileId: string = 'self', existingHistory
 export const sendMessageToOracle = async (
   message: string, 
   profileId: string = 'self',
-  levelConfig?: OracleLevelConfig
+  levelConfig?: OracleLevelConfig,
+  displayText?: string  // 可选：用户界面展示的简洁文本，存入数据库
 ): Promise<string> => {
   // Re-initialize if profile context changes or session doesn't exist
   if (chatHistory.length === 0 || currentProfileId !== profileId) {
@@ -63,7 +64,8 @@ export const sendMessageToOracle = async (
         profileId: profileId,
         userId: (await supabase.auth.getSession()).data.session?.user?.id,
         temperature: 0.7,
-        levelConfig: levelConfig
+        levelConfig: levelConfig,
+        displayText: displayText  // 简洁展示文本，存入 DB 给用户看
       })
     });
 

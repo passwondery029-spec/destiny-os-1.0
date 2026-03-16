@@ -159,9 +159,10 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             setMessages(prev => [...prev, notificationMsg]);
             
             // 延迟一小段时间再发送，让用户先看到提示
+            // 用户界面只显示简洁文字，完整 prompt 只发给 API
             setTimeout(() => {
                 console.log('[OracleChat] Calling handleSendMessage with initialPrompt');
-                handleSendMessage(initialPrompt);
+                handleSendMessage(initialPrompt, '请帮我生成今日的天机报告');
             }, 500);
             
             if (onPromptConsumed) {
@@ -170,10 +171,15 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         }
     }, [initialPrompt, isLoadingHistory, activeProfile, messages.length]);
 
-    const handleSendMessage = async (text: string) => {
+    /**
+     * @param text 发送给 API 的完整文本
+     * @param displayText 可选，显示在聊天框的简洁文本（不传则显示 text）
+     */
+    const handleSendMessage = async (text: string, displayText?: string) => {
+        const shownText = displayText || text;
         const userMsg: ChatMessage = {
             role: 'user',
-            text: text,
+            text: shownText,  // UI 显示简洁文本
             timestamp: Date.now()
         };
 
@@ -185,9 +191,11 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
         try {
             // Prepend context about WHO is being asked about
-            const contextAwarePrompt = `[当前咨询对象：${activeProfile.name}, 关系：${activeProfile.relation}, 八字：${activeProfile.bazi || '未知'}, 当前AI等级: ${levelConfig.title}] ${userMsg.text}`;
+            // 注意：发给 API 的是完整的 text，不是 displayText
+            const contextAwarePrompt = `[当前咨询对象：${activeProfile.name}, 关系：${activeProfile.relation}, 八字：${activeProfile.bazi || '未知'}, 当前AI等级: ${levelConfig.title}] ${text}`;
 
-            const responseText = await sendMessageToOracle(contextAwarePrompt, activeProfile.id, levelConfig);
+            // 传 displayText 给服务端，数据库存简洁文本
+            const responseText = await sendMessageToOracle(contextAwarePrompt, activeProfile.id, levelConfig, displayText);
             const aiMsg: ChatMessage = {
                 role: 'model',
                 text: responseText,
