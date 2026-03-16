@@ -111,6 +111,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     // Save to localStorage
     const saveToLocalStorage = (msgs: ChatMessage[], profileId: string) => {
         try {
+            console.log('[Chat] saveToLocalStorage called with profileId:', profileId, 'key:', getChatStorageKey(profileId));
             localStorage.setItem(getChatStorageKey(profileId), JSON.stringify(msgs));
         } catch (e) { console.error('localStorage save failed:', e); }
     };
@@ -118,7 +119,13 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     // Load from localStorage (fallback)
     const loadFromLocalStorage = (profileId: string): ChatMessage[] | null => {
         try {
-            const stored = localStorage.getItem(getChatStorageKey(profileId));
+            const key = getChatStorageKey(profileId);
+            console.log('[Chat] loadFromLocalStorage with profileId:', profileId, 'key:', key);
+            const stored = localStorage.getItem(key);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                console.log('[Chat] localStorage content for key:', key, 'length:', parsed.length);
+            }
             return stored ? JSON.parse(stored) : null;
         } catch (e) { console.error('localStorage load failed:', e); return null; }
     };
