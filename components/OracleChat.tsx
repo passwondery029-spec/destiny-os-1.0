@@ -88,6 +88,17 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         if (isGeneratingReport) scrollToBottom();
     }, [isGeneratingReport]);
 
+    // 强制滚动到底部（切换 tab 或初始加载时）
+    useEffect(() => {
+        if (!isLoadingHistory && messages.length > 0) {
+            // 延迟确保 DOM 渲染完成
+            setTimeout(() => {
+                scrollToBottom(false);
+                console.log('[Chat] Scroll to bottom triggered, messages:', messages.length);
+            }, 200);
+        }
+    }, [activeProfile?.id]); // 当 profile 切换时触发
+
     // Load profiles on mount (Async)
     useEffect(() => {
         const initProfiles = async () => {
