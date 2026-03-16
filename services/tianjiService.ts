@@ -2,41 +2,68 @@
 import { SYSTEM_INSTRUCTION } from '../constants';
 import { getContextString, addMemory } from './memoryService';
 import { supabase } from './supabaseClient';
+import { OracleLevelConfig } from '../types';
 
 let currentProfileId: string = 'self';
 let chatHistory: { role: string, content: string }[] = [];
 
-export const initializeChat = async (profileId: string = 'self', existingHistory: { role: string, content: string }[] = []) => {
+// 更新 system message 中的记忆碎片（每次发送消息前调用）
+const updateSystemMessageWithMemories = async (profileId: string) => {
   const context = await getContextString(profileId);
-  currentProfileId = profileId;
-
   const fullSystemInstruction = `${SYSTEM_INSTRUCTION}\n\nCURRENT USER CONTEXT (LIFE DATABASE FOR PROFILE_ID: ${profileId}):\n${context}`;
-
-  // Reset chat history with system instruction + existing history
-  chatHistory = [
-    { role: 'system', content: fullSystemInstruction },
-    ...existingHistory
-  ];
+  
+  if (chatHistory.length > 0 && chatHistory[0].role === 'system') {
+    chatHistory[0] = { role: 'system', content: fullSystemInstruction };
+  } else {
+    chatHistory.unshift({ role: 'system', content: fullSystemInstruction });
+  }
 };
 
-export const sendMessageToOracle = async (message: string, profileId: string = 'self'): Promise<string> => {
+export const initializeChat = async (profileId: string = 'self', existingHistory: { role: string, content: string }[] = []) => {
+  currentProfileId = profileId;
+  await updateSystemMessageWithMemories(profileId);
+  
+  // 如果有现有历史，添加到 system message 后面
+  if (existingHistory.length > 0) {
+    chatHistory = [chatHistory[0], ...existingHistory];
+  }
+};
+
+export const sendMessageToOracle = async (
+  message: string, 
+  profileId: string = 'self',
+  levelConfig?: OracleLevelConfig
+): Promise<string> => {
   // Re-initialize if profile context changes or session doesn't exist
   if (chatHistory.length === 0 || currentProfileId !== profileId) {
     await initializeChat(profileId);
+  } else {
+    // 每次发送消息前都更新记忆碎片，确保 AI 看到最新的记忆
+    await updateSystemMessageWithMemories(profileId);
   }
 
   try {
     // Add user message to history
     chatHistory.push({ role: 'user', content: message });
 
+    // 根据等级配置限制发送的聊天记录数量
+    let messagesToSend = [...chatHistory];
+    if (levelConfig && levelConfig._maxChatHistory) {
+      // 保留 system message（包含最新记忆）+ 最近的 _maxChatHistory 条对话
+      const systemMessage = messagesToSend[0];
+      const recentMessages = messagesToSend.slice(1).slice(-levelConfig._maxChatHistory * 2); // 每个对话包含 user 和 assistant 两条
+      messagesToSend = [systemMessage, ...recentMessages];
+    }
+
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        messages: chatHistory,
+        messages: messagesToSend,
         profileId: profileId,
         userId: (await supabase.auth.getSession()).data.session?.user?.id,
-        temperature: 0.7
+        temperature: 0.7,
+        levelConfig: levelConfig
       })
     });
 

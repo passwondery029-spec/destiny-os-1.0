@@ -39,7 +39,8 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         }
     ]);
     const [input, setInput] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false); // 专门用于历史加载
+    const [isSendingMessage, setIsSendingMessage] = useState(false); // 专门用于发送消息
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
     const [activeProfile, setActiveProfile] = useState<UserProfile | null>(null);
     const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
@@ -64,13 +65,13 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     // Scroll to bottom only when NEW messages are added (not on initial history load)
     const [lastMsgCount, setLastMsgCount] = useState(0);
     useEffect(() => {
-        // Logic: Only scroll if we are NOT loading and the message count increased by 1 (likely a new message)
+        // Logic: Only scroll if we are NOT loading history and the message count increased by 1 (likely a new message)
         // If it jumped by more (like 1 -> 50), it's a history load, so stay at top.
-        if (!isLoading && messages.length > lastMsgCount && messages.length === lastMsgCount + 1 && lastMsgCount > 0) {
+        if (!isLoadingHistory && messages.length > lastMsgCount && messages.length === lastMsgCount + 1 && lastMsgCount > 0) {
             scrollToBottom();
         }
         setLastMsgCount(messages.length);
-    }, [messages.length, isLoading]);
+    }, [messages.length, isLoadingHistory]);
 
     // Only scroll while generating (the user is waiting for a reply)
     useEffect(() => {
@@ -97,7 +98,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     useEffect(() => {
         if (!activeProfile) return;
         const loadHistory = async () => {
-            setIsLoading(true);
+            setIsLoadingHistory(true);
             try {
                 const { data: logs, error } = await supabase
                     .from('chat_logs')
@@ -135,7 +136,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             } catch (e) {
                 console.error('Failed to load history:', e);
             } finally {
-                setIsLoading(false);
+                setIsLoadingHistory(false);
             }
         };
 
@@ -144,8 +145,9 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
     // Handle Initial Prompt (Deep link from Dashboard)
     useEffect(() => {
-        // 只要有 initialPrompt 且还没处理过，就处理，不依赖 isLoading 状态
-        if (initialPrompt && !hasProcessedPrompt.current) {
+        // 只有当历史加载完成（isLoadingHistory 为 false）且有消息时，才处理 initialPrompt
+        if (initialPrompt && !hasProcessedPrompt.current && !isLoadingHistory && messages.length > 0) {
+            console.log('[OracleChat] Processing initialPrompt:', initialPrompt.substring(0, 50) + '...');
             hasProcessedPrompt.current = true;
             
             // 添加一个专门的提示消息让用户知道正在生成报告
@@ -158,6 +160,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             
             // 延迟一小段时间再发送，让用户先看到提示
             setTimeout(() => {
+                console.log('[OracleChat] Calling handleSendMessage with initialPrompt');
                 handleSendMessage(initialPrompt);
             }, 500);
             
@@ -165,7 +168,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                 onPromptConsumed();
             }
         }
-    }, [initialPrompt]);
+    }, [initialPrompt, isLoadingHistory, messages.length]);
 
     const handleSendMessage = async (text: string) => {
         const userMsg: ChatMessage = {
@@ -175,7 +178,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         };
 
         setMessages(prev => [...prev, userMsg]);
-        setIsLoading(true);
+        setIsSendingMessage(true);
 
         // Add XP for chatting
         addExp(5);
@@ -184,7 +187,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             // Prepend context about WHO is being asked about
             const contextAwarePrompt = `[当前咨询对象：${activeProfile.name}, 关系：${activeProfile.relation}, 八字：${activeProfile.bazi || '未知'}, 当前AI等级: ${levelConfig.title}] ${userMsg.text}`;
 
-            const responseText = await sendMessageToOracle(contextAwarePrompt, activeProfile.id);
+            const responseText = await sendMessageToOracle(contextAwarePrompt, activeProfile.id, levelConfig);
             const aiMsg: ChatMessage = {
                 role: 'model',
                 text: responseText,
@@ -203,12 +206,12 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                 timestamp: Date.now()
             }]);
         } finally {
-            setIsLoading(false);
+            setIsSendingMessage(false);
         }
     };
 
     const handleSendClick = async () => {
-        if (!input.trim() || isLoading) return;
+        if (!input.trim() || isSendingMessage || isGeneratingReport) return;
         const textToSend = input;
         setInput(''); // Clear input early
         await handleSendMessage(textToSend);
@@ -223,7 +226,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
     // --- REPORT GENERATION LOGIC ---
     const handleQuickReport = async (action: typeof REPORT_ACTIONS[0]) => {
-        if (isLoading || isGeneratingReport) return;
+        if (isSendingMessage || isGeneratingReport) return;
 
         if (!canGenerateFreeReport()) {
             alert(`您的等级【${levelConfig.title}】今日免费报告次数已用尽。请升级或明日再来。`);
@@ -237,7 +240,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             timestamp: Date.now()
         };
         setMessages(prev => [...prev, userMsg]);
-        setIsLoading(true);
+        setIsSendingMessage(true);
         setIsGeneratingReport(true);
 
         try {
@@ -263,7 +266,8 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             // Get Chat Response
             const chatResponse = await sendMessageToOracle(
                 `用户刚刚生成了一份《${reportData.title}》。请简短告知用户报告已生成，并已存入档案库。`,
-                activeProfile.id
+                activeProfile.id,
+                levelConfig
             );
 
             setMessages(prev => [...prev, {
@@ -276,7 +280,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             console.error(e);
             setMessages(prev => [...prev, { role: 'model', text: "报告生成失败，请稍后重试。", timestamp: Date.now() }]);
         } finally {
-            setIsLoading(false);
+            setIsSendingMessage(false);
             setIsGeneratingReport(false);
         }
     };
@@ -314,7 +318,10 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                         </div>
                         <div>
                             <span className="block font-bold text-[#1F1F1F] text-xs">{levelConfig.title}</span>
-                            <span>今日剩余报告: {Math.max(0, levelConfig.freeReportQuota - (canGenerateFreeReport() ? 0 : 999))}次</span>
+                            <div className="flex gap-3">
+                                <span>报告: {Math.max(0, levelConfig.freeReportQuota - (canGenerateFreeReport() ? 0 : 999))}/{levelConfig.freeReportQuota}</span>
+                                <span className="text-[#B8860B]">算力: {levelConfig.computingPowerPercent}%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -433,7 +440,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                         ))}
                     </AnimatePresence>
 
-                    {isLoading && (
+                    {(isSendingMessage || isGeneratingReport) && (
                         <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
                             <div className="bg-white border border-stone-100 p-4 rounded-2xl rounded-bl-none flex items-center gap-2 shadow-sm">
                                 <SparklesIcon className="w-4 h-4 text-[#B8860B] animate-spin" />
@@ -459,7 +466,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                         <button
                             key={action.type}
                             onClick={() => handleQuickReport(action)}
-                            disabled={isLoading}
+                            disabled={isSendingMessage || isGeneratingReport}
                             className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-[#F7F7F5] border border-stone-200 rounded-full text-[10px] font-bold text-stone-600 transition-colors disabled:opacity-50"
                         >
                             <DocumentPlusIcon className="w-3 h-3 text-[#B8860B]" />
@@ -471,7 +478,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
                     <button
                         onClick={() => setShowPayModal(true)}
-                        disabled={isLoading}
+                        disabled={isSendingMessage || isGeneratingReport}
                         className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-[#1F1F1F] to-[#333] border border-[#1F1F1F] rounded-full text-[10px] font-bold text-[#B8860B] shadow-sm hover:shadow-md transition-all disabled:opacity-50"
                     >
                         <LockClosedIcon className="w-3 h-3" />
@@ -488,11 +495,11 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                             onKeyDown={handleKeyPress}
                             placeholder={messages.length <= 1 ? "请聊聊您的近况..." : `回复${activeProfile?.name || '...'}...`}
                             className="w-full bg-transparent text-stone-800 rounded-2xl pl-4 pr-12 py-3 outline-none resize-none h-12 min-h-[48px] transition-all placeholder:text-stone-400 text-sm"
-                            disabled={isLoading || !activeProfile}
+                            disabled={isSendingMessage || isGeneratingReport || !activeProfile}
                         />
                         <button
                             onClick={handleSendClick}
-                            disabled={isLoading || !input.trim()}
+                            disabled={isSendingMessage || isGeneratingReport || !input.trim()}
                             className="absolute right-1.5 top-1.5 bottom-1.5 aspect-square flex items-center justify-center bg-[#1F1F1F] hover:bg-[#333] text-[#B8860B] rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <PaperAirplaneIcon className="w-4 h-4 -ml-0.5" />

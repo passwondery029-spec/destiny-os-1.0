@@ -6,7 +6,7 @@ import { supabase } from './supabaseClient';
 
 const STORAGE_KEY = 'destiny_os_reports';
 
-const getLocalReports = (): DestinyReport[] => {
+const getLocalReports = (): DestinyReport[] =&gt; {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
     // Initialize with mock data if empty
@@ -16,7 +16,7 @@ const getLocalReports = (): DestinyReport[] => {
   return JSON.parse(stored);
 };
 
-export const getReports = async (): Promise<DestinyReport[]> => {
+export const getReports = async (): Promise&lt;DestinyReport[]&gt; =&gt; {
   try {
     const { data, error } = await supabase
       .from('reports')
@@ -26,15 +26,19 @@ export const getReports = async (): Promise<DestinyReport[]> => {
     if (error) throw error;
 
     // Convert snake_case from DB to camelCase for frontend
-    if (data && data.length > 0) {
-      return data.map(r => {
+    if (data &amp;&amp; data.length &gt; 0) {
+      return data.map(r =&gt; {
         let parsedSummary = r.summary;
         let parsedContent = r.content || '';
+        let parsedHtmlContent: string | undefined;
+        let parsedCost: number | undefined;
         try {
           const packed = JSON.parse(r.summary);
           if (packed.brief) {
             parsedSummary = packed.brief;
             parsedContent = packed.full || parsedContent;
+            parsedHtmlContent = packed.html;
+            parsedCost = packed.cost;
           }
         } catch (e) {
           // It was a normal string
@@ -47,8 +51,10 @@ export const getReports = async (): Promise<DestinyReport[]> => {
           type: r.type,
           summary: parsedSummary,
           content: parsedContent,
+          htmlContent: parsedHtmlContent,
           date: r.date,
-          tags: r.tags || []
+          tags: r.tags || [],
+          cost: parsedCost
         };
       });
     }
@@ -66,8 +72,10 @@ export const addReport = async (
   summary: string,
   tags: string[],
   profileId: string = 'self',
-  content?: string
-): Promise<DestinyReport> => {
+  content?: string,
+  htmlContent?: string,
+  cost?: number
+): Promise&lt;DestinyReport&gt; =&gt; {
   const newReport: DestinyReport = {
     id: uuidv4(),
     profileId,
@@ -75,13 +83,20 @@ export const addReport = async (
     type,
     summary,
     content,
+    htmlContent,
     date: new Date().toISOString().split('T')[0],
-    tags
+    tags,
+    cost
   };
 
   try {
-    // Pack summary and content together
-    const packedSummary = JSON.stringify({ brief: newReport.summary, full: newReport.content });
+    // Pack summary, content, htmlContent, and cost together
+    const packedSummary = JSON.stringify({ 
+      brief: newReport.summary, 
+      full: newReport.content,
+      html: newReport.htmlContent,
+      cost: newReport.cost
+    });
 
     // Insert into Supabase
     const { error } = await supabase
@@ -110,7 +125,7 @@ export const addReport = async (
   return newReport;
 };
 
-export const deleteReport = async (id: string): Promise<void> => {
+export const deleteReport = async (id: string): Promise&lt;void&gt; =&gt; {
   try {
     const { error } = await supabase
       .from('reports')
@@ -122,7 +137,8 @@ export const deleteReport = async (id: string): Promise<void> => {
     console.error('Error deleting report from Supabase:', error);
     // Fallback to local storage
     const reports = getLocalReports();
-    const updated = reports.filter(r => r.id !== id);
+    const updated = reports.filter(r =&gt; r.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   }
 };
+

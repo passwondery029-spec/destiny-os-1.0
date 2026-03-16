@@ -27,18 +27,18 @@ export const DAILY_ENERGY_CURVE: EnergyPoint[] = [
   { time: '子时', energy: 30 },
 ];
 
-// 10-Tier Level System with Memory Limits
+// 10-Tier Level System with Memory Limits and Computing Power
 export const LEVEL_CONFIGS: OracleLevelConfig[] = [
-  { level: 1, title: '初窥门径', minExp: 0, maxMemoryContext: 5, freeReportQuota: 1, unlockPrice: 0, maxMemoryCount: 50 },
-  { level: 2, title: '炼气化神', minExp: 100, maxMemoryContext: 10, freeReportQuota: 2, unlockPrice: 6, maxMemoryCount: 100 },
-  { level: 3, title: '筑基修士', minExp: 300, maxMemoryContext: 20, freeReportQuota: 3, unlockPrice: 18, maxMemoryCount: 200 },
-  { level: 4, title: '金丹大成', minExp: 800, maxMemoryContext: 30, freeReportQuota: 5, unlockPrice: 68, maxMemoryCount: 300 },
-  { level: 5, title: '元婴老祖', minExp: 2000, maxMemoryContext: 50, freeReportQuota: 8, unlockPrice: 128, maxMemoryCount: 500 },
-  { level: 6, title: '化神尊者', minExp: 5000, maxMemoryContext: 80, freeReportQuota: 10, unlockPrice: 198, maxMemoryCount: 800 },
-  { level: 7, title: '返虚地仙', minExp: 10000, maxMemoryContext: 120, freeReportQuota: 15, unlockPrice: 328, maxMemoryCount: 1200 },
-  { level: 8, title: '大乘天仙', minExp: 25000, maxMemoryContext: 200, freeReportQuota: 20, unlockPrice: 648, maxMemoryCount: 2000 },
-  { level: 9, title: '九天玄仙', minExp: 50000, maxMemoryContext: 300, freeReportQuota: 30, unlockPrice: 1288, maxMemoryCount: 3000 },
-  { level: 10, title: '太上道祖', minExp: 100000, maxMemoryContext: 500, freeReportQuota: 50, unlockPrice: 0, maxMemoryCount: 9999 },
+  { level: 1, title: '初窥门径', minExp: 0, maxMemoryContext: 5, freeReportQuota: 1, unlockPrice: 0, maxMemoryCount: 50, computingPowerPercent: 100, _maxChatHistory: 3, _maxResponseLength: 80 },
+  { level: 2, title: '炼气化神', minExp: 100, maxMemoryContext: 10, freeReportQuota: 2, unlockPrice: 6, maxMemoryCount: 100, computingPowerPercent: 150, _maxChatHistory: 5, _maxResponseLength: 150 },
+  { level: 3, title: '筑基修士', minExp: 300, maxMemoryContext: 20, freeReportQuota: 3, unlockPrice: 18, maxMemoryCount: 200, computingPowerPercent: 200, _maxChatHistory: 8, _maxResponseLength: 250 },
+  { level: 4, title: '金丹大成', minExp: 800, maxMemoryContext: 30, freeReportQuota: 5, unlockPrice: 68, maxMemoryCount: 300, computingPowerPercent: 280, _maxChatHistory: 12, _maxResponseLength: 400 },
+  { level: 5, title: '元婴老祖', minExp: 2000, maxMemoryContext: 50, freeReportQuota: 8, unlockPrice: 128, maxMemoryCount: 500, computingPowerPercent: 380, _maxChatHistory: 18, _maxResponseLength: 600 },
+  { level: 6, title: '化神尊者', minExp: 5000, maxMemoryContext: 80, freeReportQuota: 10, unlockPrice: 198, maxMemoryCount: 800, computingPowerPercent: 500, _maxChatHistory: 25, _maxResponseLength: 900 },
+  { level: 7, title: '返虚地仙', minExp: 10000, maxMemoryContext: 120, freeReportQuota: 15, unlockPrice: 328, maxMemoryCount: 1200, computingPowerPercent: 650, _maxChatHistory: 35, _maxResponseLength: 1200 },
+  { level: 8, title: '大乘天仙', minExp: 25000, maxMemoryContext: 200, freeReportQuota: 20, unlockPrice: 648, maxMemoryCount: 2000, computingPowerPercent: 850, _maxChatHistory: 50, _maxResponseLength: 1800 },
+  { level: 9, title: '九天玄仙', minExp: 50000, maxMemoryContext: 300, freeReportQuota: 30, unlockPrice: 1288, maxMemoryCount: 3000, computingPowerPercent: 1000, _maxChatHistory: 80, _maxResponseLength: 2500 },
+  { level: 10, title: '太上道祖', minExp: 100000, maxMemoryContext: 500, freeReportQuota: 50, unlockPrice: 0, maxMemoryCount: 9999, computingPowerPercent: 1500, _maxChatHistory: 150, _maxResponseLength: 5000 },
 ];
 
 export const SYSTEM_INSTRUCTION = `你是"命运魔术师"，一位神秘的命理咨询师兼心理疗愈师。
