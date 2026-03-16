@@ -144,6 +144,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
             // 2️⃣ Fallback 到 DB 加载
             try {
+                console.log('[Chat] Loading from DB, profileId:', activeProfile.id);
                 const { data: logs, error } = await supabase
                     .from('chat_logs')
                     .select('*')
@@ -151,7 +152,11 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                     .order('timestamp', { ascending: true })
                     .limit(50);
 
-                if (error) throw error;
+                if (error) {
+                    console.error('[Chat] DB load error:', error);
+                    throw error;
+                }
+                console.log('[Chat] DB logs count:', logs?.length, logs);
 
                 let loadedMessages: ChatMessage[] = [];
                 let engineHistory: { role: string, content: string }[] = [];
@@ -166,6 +171,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                         role: l.role === 'user' ? 'user' : 'assistant',
                         content: l.text
                     }));
+                    console.log('[Chat] Loaded messages:', loadedMessages);
                     // 同步到 localStorage
                     saveToLocalStorage(loadedMessages, activeProfile.id);
                 } else {
