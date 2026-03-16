@@ -11,7 +11,7 @@ import { getProfiles } from '../services/profileService';
 import { supabase } from '../services/supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SparklesIcon, ArrowRightIcon, XMarkIcon, SunIcon, WalletIcon } from '@heroicons/react/24/outline';
-import { getBalance, deductBalance, REPORT_PRICE } from '../services/walletService';
+import { getBalance, deductBalance, REPORT_PRICE, addBalance } from '../services/walletService';
 
 const MotionDiv = motion.div as any;
 const MotionButton = motion.button as any;
@@ -55,6 +55,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
 
     // Wooden Fish State
     const [meritCount, setMeritCount] = useState(0);
+    const [fishClickCount, setFishClickCount] = useState(0); // 记录木鱼点击次数，用于天机币计算
     const [ripples, setRipples] = useState<{ id: number, x: number, y: number }[]>([]);
     const [xpGainedToday, setXpGainedToday] = useState(0);
 
@@ -125,7 +126,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
             setRipples(prev => prev.filter(r => r.id !== newRipple.id));
         }, 1000);
 
-        // Logic: Add XP (Cap at 50 clicks per session to avoid spamming storage too hard, real app uses backend)
+        // Logic: 敲木鱼10次获得1枚天机币
+        const newClickCount = fishClickCount + 1;
+        setFishClickCount(newClickCount);
+        
+        // 每10次获得1枚天机币
+        if (newClickCount % 10 === 0) {
+            addBalance(1, '木鱼诵经');
+            setBalance(b => b + 1);
+        }
+        
+        // 同时也增加灵力值（保留原有的灵力系统）
         if (xpGainedToday < 50) {
             addExp(1);
             setXpGainedToday(p => p + 1);
@@ -384,28 +395,38 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
 
                     {/* Floating Merits Text */}
                     <div className="absolute left-8 -top-10 w-full flex justify-center pointer-events-none">
-                        {ripples.map(r => (
-                            <MotionDiv
-                                key={'text-' + r.id}
-                                initial={{ y: 0, opacity: 1 }}
-                                animate={{ y: -40, opacity: 0 }}
-                                transition={{ duration: 1 }}
-                                className="absolute text-[#8B0000] font-serif font-bold text-lg whitespace-nowrap"
-                            >
-                                灵力 +1
-                            </MotionDiv>
-                        ))}
+                        {ripples.map(r => {
+                            // 检查这次点击是否是第10次（获得天机币）
+                            const isCoinReward = (fishClickCount) % 10 === 0;
+                            return (
+                                <MotionDiv
+                                    key={'text-' + r.id}
+                                    initial={{ y: 0, opacity: 1 }}
+                                    animate={{ y: -40, opacity: 0 }}
+                                    transition={{ duration: 1 }}
+                                    className={`absolute font-serif font-bold text-lg whitespace-nowrap ${isCoinReward ? 'text-[#B8860B]' : 'text-[#8B0000]'}`}
+                                >
+                                    {isCoinReward ? '天机币 +1' : '诵经'}
+                                </MotionDiv>
+                            );
+                        })}
                     </div>
 
                     <div>
-                        <h4 className="font-serif font-bold text-stone-800">修心积德</h4>
-                        <p className="text-[10px] text-stone-400">轻触木鱼提升灵力，解锁等级。</p>
+                        <h4 className="font-serif font-bold text-stone-800">诵经积福</h4>
+                        <p className="text-[10px] text-stone-400">轻触木鱼诵经祈福，每10次获1枚天机币。</p>
                     </div>
                 </div>
 
-                <div className="text-right">
-                    <span className="text-[10px] text-stone-400 block uppercase tracking-wider">总灵力 (XP)</span>
-                    <span className="text-2xl font-serif text-[#B8860B] font-bold tabular-nums">{meritCount}</span>
+                <div className="text-right flex flex-col items-end gap-1">
+                    <div>
+                        <span className="text-[10px] text-stone-400 block uppercase tracking-wider">天机币</span>
+                        <span className="text-2xl font-serif text-[#B8860B] font-bold tabular-nums">{balance}</span>
+                    </div>
+                    <div className="text-right">
+                        <span className="text-[10px] text-stone-400 block uppercase tracking-wider">灵力</span>
+                        <span className="text-sm font-serif text-stone-500 tabular-nums">{meritCount}</span>
+                    </div>
                 </div>
             </MotionDiv>
 
