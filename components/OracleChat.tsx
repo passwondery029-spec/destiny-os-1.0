@@ -146,9 +146,22 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         const loadHistory = async () => {
             setIsLoadingHistory(true);
             
-            // 每次登录都从 Supabase 拉取全部聊天记录
+            // 1️⃣ 优先从 localStorage 快速加载（切换页面时立即显示）
+            const localMsgs = loadFromLocalStorage(activeProfile.id);
+            if (localMsgs && localMsgs.length > 0) {
+                console.log('[Chat] Quick load from localStorage:', localMsgs.length, 'messages');
+                const engineHistory = localMsgs.map(l => ({
+                    role: l.role === 'user' ? 'user' : 'assistant',
+                    content: l.text
+                }));
+                setMessages(localMsgs);
+                await initializeChat(activeProfile.id, engineHistory);
+                setIsLoadingHistory(false);
+            }
+
+            // 2️⃣ 后台从 Supabase 拉取全部记录并更新（确保数据最新）
             try {
-                console.log('[Chat] Loading ALL from DB, profileId:', activeProfile.id);
+                console.log('[Chat] Background refresh from DB, profileId:', activeProfile.id);
                 const { data: logs, error } = await supabase
                     .from('chat_logs')
                     .select('*')
@@ -157,59 +170,52 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                     // 去掉 limit(50)，拉取全部记录
 
                 if (error) {
-                    console.error('[Chat] DB load error:', error);
+                    console.error('[Chat] DB refresh error:', error);
                     throw error;
                 }
-                console.log('[Chat] DB logs count:', logs?.length, logs);
-
-                let loadedMessages: ChatMessage[] = [];
-                let engineHistory: { role: string, content: string }[] = [];
+                console.log('[Chat] DB refresh logs count:', logs?.length);
 
                 if (logs && logs.length > 0) {
-                    loadedMessages = logs.map(l => ({
+                    const dbMessages = logs.map(l => ({
                         role: l.role === 'user' ? 'user' : 'model',
                         text: l.text,
                         timestamp: l.timestamp
                     }));
-                    engineHistory = logs.map(l => ({
+                    const engineHistory = logs.map(l => ({
                         role: l.role === 'user' ? 'user' : 'assistant',
                         content: l.text
                     }));
-                    console.log('[Chat] Loaded messages:', loadedMessages);
-                    // 同步到 localStorage 作为备份
-                    saveToLocalStorage(loadedMessages, activeProfile.id);
-                } else {
-                    loadedMessages = [{
+                    
+                    // 检查是否需要更新（DB 的记录比 localStorage 新或更多）
+                    const localCount = localMsgs?.length || 0;
+                    const dbCount = logs.length;
+                    const lastLocalTimestamp = localMsgs && localMsgs.length > 0 
+                        ? localMsgs[localMsgs.length - 1].timestamp 
+                        : 0;
+                    const lastDbTimestamp = logs.length > 0 
+                        ? logs[logs.length - 1].timestamp 
+                        : 0;
+                    
+                    if (dbCount > localCount || lastDbTimestamp > lastLocalTimestamp) {
+                        console.log('[Chat] Updating with newer DB data, local:', localCount, 'db:', dbCount);
+                        setMessages(dbMessages);
+                        await initializeChat(activeProfile.id, engineHistory);
+                        saveToLocalStorage(dbMessages, activeProfile.id);
+                    } else {
+                        console.log('[Chat] Local data is already up to date');
+                    }
+                } else if (!localMsgs || localMsgs.length === 0) {
+                    // DB 也没有记录，显示欢迎语
+                    const welcomeMsg = [{
                         role: 'model',
                         text: '求道者，幸会。我是您的命运魔术师。今日星象变幻，您似乎有心事？不妨说来听听，也许我能为您从记忆的碎片中找到答案。',
                         timestamp: Date.now()
                     }];
+                    setMessages(welcomeMsg);
                 }
-
-                setMessages(loadedMessages);
-                await initializeChat(activeProfile.id, engineHistory);
             } catch (e) {
-                console.error('Failed to load history from DB, trying localStorage:', e);
-                // 如果 DB 加载失败，才 fallback 到 localStorage
-                const localMsgs = loadFromLocalStorage(activeProfile.id);
-                if (localMsgs && localMsgs.length > 0) {
-                    console.log('[Chat] Fallback to localStorage:', localMsgs.length, 'messages');
-                    const engineHistory = localMsgs.map(l => ({
-                        role: l.role === 'user' ? 'user' : 'assistant',
-                        content: l.text
-                    }));
-                    setMessages(localMsgs);
-                    await initializeChat(activeProfile.id, engineHistory);
-                } else {
-                    // 最后 fallback 到默认欢迎语
-                    setMessages([{
-                        role: 'model',
-                        text: '求道者，幸会。我是您的命运魔术师。今日星象变幻，您似乎有心事？不妨说来听听，也许我能为您从记忆的碎片中找到答案。',
-                        timestamp: Date.now()
-                    }]);
-                }
-            } finally {
-                setIsLoadingHistory(false);
+                console.error('Background DB refresh failed:', e);
+                // 后台刷新失败不影响前端显示（已经有 localStorage 的数据了）
             }
         };
 
