@@ -8,7 +8,8 @@ const INITIAL_STATE: UserLevelState = {
     currentLevel: 1,
     currentExp: 0,
     todayReportCount: 0,
-    lastLoginDate: new Date().toISOString().split('T')[0]
+    lastLoginDate: new Date().toISOString().split('T')[0],
+    lastReportDate: ''  // 记录上次生成报告的日期
 };
 
 export const getLevelState = (): UserLevelState => {
@@ -65,6 +66,29 @@ export const incrementReportCount = (): void => {
     state.currentExp += 50;
     
     // Check Level Up again logic (simplified duplication)
+    const nextLevel = LEVEL_CONFIGS.find(l => l.level === state.currentLevel + 1);
+    if (nextLevel && state.currentExp >= nextLevel.minExp) {
+        state.currentLevel += 1;
+    }
+    
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+};
+
+// 检查今天是否已生成过天命报告
+export const canGenerateTodayReport = (): boolean => {
+    const state = getLevelState();
+    const today = new Date().toISOString().split('T')[0];
+    return state.lastReportDate !== today;
+};
+
+// 标记今日已生成报告
+export const markTodayReportGenerated = (): void => {
+    const state = getLevelState();
+    const today = new Date().toISOString().split('T')[0];
+    state.lastReportDate = today;
+    state.todayReportCount += 1;
+    state.currentExp += 50;
+    
     const nextLevel = LEVEL_CONFIGS.find(l => l.level === state.currentLevel + 1);
     if (nextLevel && state.currentExp >= nextLevel.minExp) {
         state.currentLevel += 1;

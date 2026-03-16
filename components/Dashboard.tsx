@@ -5,7 +5,7 @@ import {
     AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid
 } from 'recharts';
 import { THEME_COLORS } from '../constants';
-import { addExp, getLevelState, canGenerateFreeReport, incrementReportCount, getCurrentLevelConfig } from '../services/levelService';
+import { addExp, getLevelState, canGenerateFreeReport, incrementReportCount, getCurrentLevelConfig, canGenerateTodayReport, markTodayReportGenerated } from '../services/levelService';
 import { generateDailyFortune, DailyFortune } from '../services/fortuneService';
 import { getProfiles } from '../services/profileService';
 import { supabase } from '../services/supabaseClient';
@@ -51,6 +51,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
     const [freeReportsLeft, setFreeReportsLeft] = useState(0);
     const [showPaywall, setShowPaywall] = useState(false); // 充値提示弹窗
     const [isGenerating, setIsGenerating] = useState(false); // 正在生成报告的状态
+    const [todayReportGenerated, setTodayReportGenerated] = useState(false); // 今日是否已生成报告
 
     // Wooden Fish State
     const [meritCount, setMeritCount] = useState(0);
@@ -61,6 +62,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
     const [showDailyNotif, setShowDailyNotif] = useState(false);
 
     useEffect(() => {
+        // 检查今日是否已生成过报告
+        setTodayReportGenerated(!canGenerateTodayReport());
+        
         // Initialize Fortune
         getProfiles().then(profiles => {
             const selfProfile = profiles.find(p => p.relation === 'SELF');
@@ -235,27 +239,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
 - 报告面向真实付费用户，语言流畅自然
 - 不要在报告末尾添加括号备注或系统指令`;
 
-            // 1️⃣ 先检查免费配额
-            if (canGenerateFreeReport()) {
-                incrementReportCount();
-                const config = getCurrentLevelConfig();
-                const levelState = getLevelState();
-                setFreeReportsLeft(Math.max(0, config.freeReportQuota - levelState.todayReportCount));
-                onNavigateToChat(detailedPrompt);
+            // 1️⃣ 先检查今日是否已生成
+            if (!canGenerateTodayReport()) {
+                // 今日已生成，直接跳转到天机阁查看
+                onNavigateToChat('');
                 return;
             }
 
-            // 2️⃣ 免费送尽，尝试扮天机币
-            const { success, newBalance } = await deductBalance(REPORT_PRICE, `生成天命报告 × 1`);
-            if (success) {
-                setBalance(newBalance);
-                incrementReportCount();
-                onNavigateToChat(detailedPrompt);
-                return;
-            }
-
-            // 3️⃣ 余额不足，弹充値提示
-            setShowPaywall(true);
+            // 2️⃣ 生成报告并标记今日已生成
+            markTodayReportGenerated();
+            setTodayReportGenerated(true);  // 更新按钮状态
+            onNavigateToChat(detailedPrompt);
         } finally {
             setIsGenerating(false);
         }
@@ -324,34 +318,36 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
             {/* 3. CALL TO ACTION: Generate Report */}
             <MotionButton
                 onClick={handleDetailedReport}
-                whileHover={{ scale: isGenerating ? 1 : 1.01 }}
-                whileTap={{ scale: isGenerating ? 1 : 0.98 }}
-                disabled={isGenerating}
-                className={`w-full bg-[#1F1F1F] text-[#F7F7F5] p-4 rounded-xl shadow-lg flex items-center justify-between group cursor-pointer transition-all ${isGenerating ? 'opacity-80 cursor-not-allowed' : ''}`}
+                whileHover={{ scale: todayReportGenerated || isGenerating ? 1 : 1.01 }}
+                whileTap={{ scale: todayReportGenerated || isGenerating ? 1 : 0.98 }}
+                disabled={todayReportGenerated || isGenerating}
+                className={`w-full bg-[#1F1F1F] text-[#F7F7F5] p-4 rounded-xl shadow-lg flex items-center justify-between group cursor-pointer transition-all ${todayReportGenerated || isGenerating ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-[#333] flex items-center justify-center">
                         {isGenerating ? (
                             <div className="w-5 h-5 border-2 border-[#B8860B] border-t-transparent rounded-full animate-spin"></div>
+                        ) : todayReportGenerated ? (
+                            <SparklesIcon className="w-5 h-5 text-emerald-400" />
                         ) : (
                             <SparklesIcon className="w-5 h-5 text-[#B8860B]" />
                         )}
                     </div>
                     <div className="text-left">
                         <p className="font-bold text-sm tracking-wide">
-                            {isGenerating ? '正在跳转天机阁...' : '生成今日详细天命报告'}
+                            {todayReportGenerated ? '本日已生成' : isGenerating ? '正在跳转天机阁...' : '生成今日详细天命报告'}
                         </p>
                         {isGenerating ? (
                             <p className="text-[10px] text-[#B8860B]">请稍候，正在准备您的专属报告...</p>
-                        ) : freeReportsLeft > 0 ? (
-                            <p className="text-[10px] text-emerald-400">今日免费剩余 {freeReportsLeft} 次 · 免费生成</p>
+                        ) : todayReportGenerated ? (
+                            <p className="text-[10px] text-emerald-400">可前往天机阁查看完整报告</p>
                         ) : (
-                            <p className="text-[10px] text-[#B8860B]">免费额度已用尽 · 消耗 {REPORT_PRICE} 天机币（余{Math.floor(balance)}）</p>
+                            <p className="text-[10px] text-[#B8860B]">每日仅可生成一次</p>
                         )}
                     </div>
                 </div>
                 {!isGenerating && (
-                    <ArrowRightIcon className="w-5 h-5 text-[#B8860B] transform group-hover:translate-x-1 transition-transform" />
+                    <ArrowRightIcon className={`w-5 h-5 transform group-hover:translate-x-1 transition-transform ${todayReportGenerated ? 'text-emerald-400' : 'text-[#B8860B]'}`} />
                 )}
             </MotionButton>
 
