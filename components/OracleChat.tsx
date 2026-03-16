@@ -25,6 +25,7 @@ interface OracleChatProps {
     onPromptConsumed?: () => void;
     onNavigate?: (route: AppRoute) => void;
     onViewReport?: (report: DestinyReport) => void;
+    currentRoute?: AppRoute;
 }
 
 const REPORT_ACTIONS = [
@@ -33,7 +34,7 @@ const REPORT_ACTIONS = [
     { label: '财库补全指引', prompt: '请分析我的财运走势，并给出补财库的具体建议。', type: 'WEALTH' },
 ];
 
-const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed, onNavigate, onViewReport }) => {
+const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed, onNavigate, onViewReport, currentRoute }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([
         {
             role: 'model',
@@ -98,6 +99,17 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             }, 200);
         }
     }, [activeProfile?.id]); // 当 profile 切换时触发
+
+    // 切换到天机阁时强制滚动到底部
+    useEffect(() => {
+        if (currentRoute === AppRoute.ORACLE && !isLoadingHistory && messages.length > 0) {
+            console.log('[Chat] Switched to Oracle tab, scrolling to bottom');
+            // 延迟一点确保页面显示后再滚动
+            setTimeout(() => {
+                scrollToBottom(false);
+            }, 100);
+        }
+    }, [currentRoute]); // 当路由变化时触发
 
     // Load profiles on mount (Async)
     useEffect(() => {

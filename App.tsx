@@ -106,6 +106,7 @@ function App() {
           onPromptConsumed={() => setInitialChatPrompt(null)}
           onNavigate={setRoute}
           onViewReport={handleViewReport}
+          currentRoute={route}
         />
       </div>
       <div className={route === AppRoute.DIVINATION ? 'block' : 'hidden'}>
