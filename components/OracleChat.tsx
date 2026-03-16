@@ -144,9 +144,23 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
     // Handle Initial Prompt (Deep link from Dashboard)
     useEffect(() => {
-        if (initialPrompt && !hasProcessedPrompt.current && !isLoading) {
+        // 只要有 initialPrompt 且还没处理过，就处理，不依赖 isLoading 状态
+        if (initialPrompt && !hasProcessedPrompt.current) {
             hasProcessedPrompt.current = true;
-            handleSendMessage(initialPrompt);
+            
+            // 添加一个专门的提示消息让用户知道正在生成报告
+            const notificationMsg: ChatMessage = {
+                role: 'model',
+                text: '正在为您生成今日详细天命报告，请稍候...\n\n（基于您的生辰八字和今日运势数据进行深度分析）',
+                timestamp: Date.now()
+            };
+            setMessages(prev => [...prev, notificationMsg]);
+            
+            // 延迟一小段时间再发送，让用户先看到提示
+            setTimeout(() => {
+                handleSendMessage(initialPrompt);
+            }, 500);
+            
             if (onPromptConsumed) {
                 onPromptConsumed();
             }
