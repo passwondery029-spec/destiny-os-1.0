@@ -135,8 +135,23 @@ app.post('/api/chat', async (req, res) => {
 
     res.json({ text: replyText });
   } catch (error: any) {
-    console.error('Ark API Error (Chat):', error);
-    res.status(500).json({ error: error.message || 'Failed to communicate with Ark API' });
+    console.error('='.repeat(60));
+    console.error('Ark API Error (Chat):');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Ark API Key configured:', !!process.env.ARK_API_KEY);
+    console.error('Ark Endpoint ID:', process.env.ARK_ENDPOINT_ID || 'NOT SET');
+    console.error('='.repeat(60));
+    
+    // 返回更详细的错误信息
+    let errorMessage = 'Failed to communicate with Ark API';
+    if (error.message) {
+      errorMessage = error.message;
+    } else if (error.code) {
+      errorMessage = `Error code: ${error.code}`;
+    }
+    
+    res.status(500).json({ error: errorMessage });
   }
 });
 
