@@ -108,19 +108,21 @@ const Layout: React.FC<LayoutProps> = ({ currentRoute, setRoute, children }) => 
         <div className="p-5 lg:p-10 max-w-6xl mx-auto relative z-10 min-h-full flex flex-col">
           {children}
 
-          {/* Web Footer (Compliance Info) */}
-          <footer className="mt-auto pt-12 pb-6 text-center space-y-2">
-            <p className="text-[10px] text-stone-400 font-serif">
-              天命系统 Destiny OS &copy; 2025 <br />
-              <span className="opacity-50">天机阁AI 提供技术支持</span>
-            </p>
-            <div className="flex flex-col items-center gap-1 text-[9px] text-stone-300">
-              <p>京ICP备12345678号-1 | 京公网安备11010502030000号</p>
-              <p className="max-w-md">
-                本服务提供的命理分析仅供娱乐与文化研究，不依据科学标准，不应作为重大生活决策的依据。请用户相信科学，拒绝迷信。
+          {/* Web Footer - Only show on MINE page */}
+          {currentRoute === AppRoute.MINE && (
+            <footer className="mt-auto pt-12 pb-6 text-center space-y-2">
+              <p className="text-[10px] text-stone-400 font-serif">
+                天命系统 Destiny OS &copy; 2025 <br />
+                <span className="opacity-50">天机阁AI 提供技术支持</span>
               </p>
-            </div>
-          </footer>
+              <div className="flex flex-col items-center gap-1 text-[9px] text-stone-300">
+                <p>京ICP备12345678号-1 | 京公网安备11010502030000号</p>
+                <p className="max-w-md">
+                  本服务提供的命理分析仅供娱乐与文化研究，不依据科学标准，不应作为重大生活决策的依据。请用户相信科学，拒绝迷信。
+                </p>
+              </div>
+            </footer>
+          )}
         </div>
       </main>
 
