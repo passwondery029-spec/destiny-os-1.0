@@ -27,12 +27,18 @@ export interface DifyReportResponse {
 }
 
 /**
- * 调用 Dify 工作流生成报告
+ * 调用 Dify 工作流生成报告（异步模式）
+ * 1. 提交任务，获取 taskId
+ * 2. 每 10 秒轮询状态
+ * 3. 完成后返回结果
+ * 
+ * @param onProgress 可选的进度回调，用于更新 UI
  */
 export const generateReportWithDify = async (
   profile: UserProfile,
   reportType: string,
-  customTopic?: string
+  customTopic?: string,
+  onProgress?: (progress: number, message: string) => void
 ): Promise<DifyReportResponse> => {
   try {
     // 获取用户的记忆碎片
@@ -46,21 +52,77 @@ export const generateReportWithDify = async (
       customTopic
     };
 
-    // 调用后端 API（后端再调用 Dify）
-    const response = await fetch('/api/dify/report', {
+    // 第一步：提交任务
+    onProgress?.(5, '正在提交报告生成任务...');
+    const submitResponse = await fetch('/api/dify/report', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestData),
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    if (!submitResponse.ok) {
+      throw new Error(`提交失败: ${submitResponse.status}`);
     }
 
-    const data = await response.json();
-    return data;
+    const submitData = await submitResponse.json();
+    
+    if (!submitData.taskId) {
+      // 如果没有 taskId，说明是旧版直接返回结果的模式
+      return submitData;
+    }
+
+    const taskId = submitData.taskId;
+    onProgress?.(10, '任务已提交，天机阁正在为您推演命盘...');
+
+    // 第二步：轮询结果（最多等 12 分钟）
+    const maxWait = 720000; // 12 分钟
+    const pollInterval = 10000; // 10 秒
+    const startTime = Date.now();
+
+    const progressMessages = [
+      '天机阁正在推演命盘...',
+      '正在分析八字格局...',
+      '正在查阅古籍典籍...',
+      '正在结合流年运势...',
+      '正在撰写深度报告...',
+      '正在精修报告细节...',
+      '报告即将生成完毕...'
+    ];
+
+    while (Date.now() - startTime < maxWait) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+      try {
+        const pollResponse = await fetch(`/api/dify/report/${taskId}`);
+        const pollData = await pollResponse.json();
+
+        if (pollData.status === 'completed') {
+          onProgress?.(100, '报告已生成！');
+          return {
+            success: true,
+            htmlContent: pollData.htmlContent,
+            title: pollData.title,
+            summary: pollData.summary
+          };
+        }
+
+        if (pollData.status === 'failed') {
+          throw new Error(pollData.error || '报告生成失败');
+        }
+
+        // 更新进度
+        const elapsed = (Date.now() - startTime) / 1000;
+        const msgIndex = Math.min(
+          progressMessages.length - 1,
+          Math.floor(elapsed / 60)
+        );
+        onProgress?.(pollData.progress || 20, progressMessages[msgIndex]);
+      } catch (pollError) {
+        console.warn('Poll error, will retry:', pollError);
+      }
+    }
+
+    throw new Error('报告生成超时，请稍后重试');
   } catch (error) {
     console.error('Dify Report Generation Error:', error);
     return {

@@ -508,20 +508,50 @@ cron.schedule('0 * * * *', () => {
 runChatLogCleanupJob();
 
 // Dify Report Generation API
+// ============ Dify 异步任务系统 ============
+// 内存中存储任务状态（生产环境应使用 Redis 或数据库）
+const difyTasks: Map<string, {
+  status: 'pending' | 'completed' | 'failed';
+  progress: number; // 0-100
+  result?: { htmlContent: string; title: string; summary: string };
+  error?: string;
+  createdAt: number;
+}> = new Map();
+
+// 每 30 分钟清理已完成超过 1 小时的任务
+setInterval(() => {
+  const now = Date.now();
+  for (const [taskId, task] of difyTasks.entries()) {
+    if (task.status !== 'pending' && now - task.createdAt > 3600000) {
+      difyTasks.delete(taskId);
+    }
+  }
+}, 1800000);
+
+// 提交 Dify 报告生成任务（立即返回 taskId）
 app.post('/api/dify/report', async (req, res) => {
   try {
     const { profile, memories, reportType, customTopic } = req.body;
     
-    console.log(`[Dify] Generating report for ${profile?.name}, type: ${reportType}`);
+    const taskId = `dify_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    console.log(`[Dify] Task ${taskId} created for ${profile?.name}, type: ${reportType}`);
     
-    // 如果配置了 EXTERNAL_REPORT_AGENT_URL 和 EXTERNAL_REPORT_AGENT_KEY，则调用真实的 Dify API
+    // 立即创建任务
+    difyTasks.set(taskId, {
+      status: 'pending',
+      progress: 10,
+      createdAt: Date.now()
+    });
+
+    // 立即返回 taskId，不阻塞
+    res.json({ success: true, taskId, message: '报告生成已启动，预计需要 8-10 分钟' });
+
+    // 后台异步执行 Dify 调用
     const EXTERNAL_REPORT_AGENT_URL = process.env.EXTERNAL_REPORT_AGENT_URL;
     const EXTERNAL_REPORT_AGENT_KEY = process.env.EXTERNAL_REPORT_AGENT_KEY;
     
     if (EXTERNAL_REPORT_AGENT_URL && EXTERNAL_REPORT_AGENT_KEY) {
-      // 调用真实的 Dify API
       try {
-        // 构建 xuqiu 字段（需求描述）
         const typeNames: Record<string, string> = {
           'YEARLY': '2025流年运势',
           'CAREER': '事业前程详批',
@@ -532,10 +562,14 @@ app.post('/api/dify/report', async (req, res) => {
         const xuqiu = customTopic 
           ? `定制报告：${customTopic}`
           : `生成${typeNames[reportType] || '深度命理报告'}`;
-        
-        // 设置 5 分钟超时（300000ms）
+
+        // 更新进度
+        const task = difyTasks.get(taskId);
+        if (task) task.progress = 20;
+
+        // 设置 10 分钟超时（600000ms）
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 300000);
+        const timeoutId = setTimeout(() => controller.abort(), 600000);
         
         const difyResponse = await fetch(EXTERNAL_REPORT_AGENT_URL, {
           method: 'POST',
@@ -563,130 +597,82 @@ app.post('/api/dify/report', async (req, res) => {
 
         if (difyResponse.ok) {
           const difyData = await difyResponse.json();
-          // 解析 Dify 返回的数据结构（根据实际 Dify 工作流输出调整）
-          const htmlContent = difyData.data?.outputs?.html || difyData.data?.outputs?.content || '';
+          const htmlContent = difyData.data?.outputs?.html || difyData.data?.outputs?.content || difyData.data?.outputs?.text || '';
           const title = difyData.data?.outputs?.title || `深度报告 - ${profile?.name}`;
           const summary = difyData.data?.outputs?.summary || '基于您的命盘和记忆档案生成的深度分析报告。';
           
-          return res.json({
-            success: true,
-            htmlContent,
-            title,
-            summary
-          });
+          const completedTask = difyTasks.get(taskId);
+          if (completedTask) {
+            completedTask.status = 'completed';
+            completedTask.progress = 100;
+            completedTask.result = { htmlContent, title, summary };
+          }
+          console.log(`[Dify] Task ${taskId} completed successfully`);
+          return;
+        } else {
+          const errorText = await difyResponse.text();
+          throw new Error(`Dify API returned ${difyResponse.status}: ${errorText}`);
         }
-      } catch (difyError) {
-        console.error('[Dify] API call failed, falling back to mock:', difyError);
+      } catch (difyError: any) {
+        console.error(`[Dify] Task ${taskId} failed:`, difyError.message);
+        const failedTask = difyTasks.get(taskId);
+        if (failedTask) {
+          failedTask.status = 'failed';
+          failedTask.error = difyError.message || '调用失败';
+        }
+        return;
       }
     }
     
-    // 如果没有配置 Dify 或调用失败，使用模拟数据
-    console.log('[Dify] Using mock report generation');
-    
-    const typeNames: Record<string, string> = {
-      'YEARLY': '2025流年运势',
-      'CAREER': '事业前程详批',
-      'WEALTH': '财库补全指引',
-      'CUSTOM': '定制深度报告'
-    };
-
-    const reportTitle = customTopic 
-      ? `定制报告：${customTopic}`
-      : `${typeNames[reportType] || '深度命理报告'} - ${profile?.name || '用户'}`;
-
-    const summary = `这是为${profile?.name || '用户'}生成的${typeNames[reportType] || '深度'}报告。基于您的生辰八字${profile?.bazi ? `(${profile.bazi})` : ''}和记忆档案，为您提供专业的命理分析。`;
-
-    // 模拟 HTML 报告内容
-    const htmlContent = `
-<div style="font-family: 'Georgia', serif; max-width: 800px; margin: 0 auto; padding: 40px 20px;">
-  <div style="text-align: center; margin-bottom: 40px; padding-bottom: 30px; border-bottom: 2px solid #B8860B;">
-    <h1 style="font-size: 32px; color: #1F1F1F; margin-bottom: 10px;">${reportTitle}</h1>
-    <p style="color: #666; font-size: 14px;">生成时间：${new Date().toLocaleString('zh-CN')}</p>
-  </div>
-
-  <div style="background: #F7F7F5; padding: 30px; border-radius: 12px; margin-bottom: 30px;">
-    <h2 style="color: #8B0000; font-size: 18px; margin-bottom: 15px;">核心断语</h2>
-    <p style="font-size: 18px; line-height: 1.8; color: #333; font-style: italic;">${summary}</p>
-  </div>
-
-  <div style="margin-bottom: 30px;">
-    <h2 style="color: #1F1F1F; font-size: 20px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
-      <span style="color: #B8860B;">▲</span> 个人档案
-    </h2>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
-      <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
-        <div style="color: #666; font-size: 12px; margin-bottom: 5px;">姓名</div>
-        <div style="color: #1F1F1F; font-size: 16px; font-weight: bold;">${profile?.name || '用户'}</div>
-      </div>
-      <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
-        <div style="color: #666; font-size: 12px; margin-bottom: 5px;">出生日期</div>
-        <div style="color: #1F1F1F; font-size: 16px; font-weight: bold;">${profile?.birthDate || '未知'} ${profile?.birthTime || ''}</div>
-      </div>
-      ${profile?.bazi ? `
-      <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
-        <div style="color: #666; font-size: 12px; margin-bottom: 5px;">八字排盘</div>
-        <div style="color: #1F1F1F; font-size: 16px; font-weight: bold;">${profile.bazi}</div>
-      </div>
-      ` : ''}
-    </div>
-  </div>
-
-  <div style="margin-bottom: 30px;">
-    <h2 style="color: #1F1F1F; font-size: 20px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
-      <span style="color: #8B0000;">●</span> ${typeNames[reportType] || '深度分析'}
-    </h2>
-    <div style="line-height: 2; color: #333; font-size: 16px;">
-      <p style="margin-bottom: 20px;">
-        <strong style="color: #1F1F1F;">【运势总论】</strong><br />
-        基于您的命盘分析，${profile?.name || '用户'}的${typeNames[reportType] || '整体运势'}呈现${reportType === 'YEARLY' ? '上升发展' : reportType === 'CAREER' ? '稳步推进' : reportType === 'WEALTH' ? '稳健积累' : '积极向上'}的态势。
-      </p>
-      <p style="margin-bottom: 20px;">
-        <strong style="color: #B8860B;">【关键提示】</strong><br />
-        建议把握${reportType === 'YEARLY' ? '年中' : reportType === 'CAREER' ? '季度转换' : reportType === 'WEALTH' ? '财务规划' : '关键'}时期的机遇，保持积极心态，避免急躁冒进。
-      </p>
-      <p style="margin-bottom: 20px;">
-        <strong style="color: #8B0000;">【行动建议】</strong><br />
-        1. 保持规律作息，养护身心<br />
-        2. 定期复盘，调整策略<br />
-        3. 广结善缘，把握机遇<br />
-        4. 稳健行事，避免冒险
-      </p>
-    </div>
-  </div>
-
-  ${customTopic ? `
-  <div style="margin-bottom: 30px;">
-    <h2 style="color: #1F1F1F; font-size: 20px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
-      <span style="color: #B8860B;">★</span> 定制主题分析
-    </h2>
-    <div style="background: linear-gradient(135deg, #F7F7F5 0%, #fff 100%); padding: 25px; border-radius: 12px; border-left: 4px solid #B8860B;">
-      <div style="color: #666; font-size: 12px; margin-bottom: 10px;">定制主题</div>
-      <div style="color: #1F1F1F; font-size: 18px; font-weight: bold; margin-bottom: 15px;">${customTopic}</div>
-      <div style="color: #333; line-height: 1.8;">
-        针对您定制的主题"${customTopic}"，结合您的命盘和记忆档案，为您提供深度分析和具体建议。在接下来的日子里，建议您关注相关领域的变化，保持开放心态，积极应对各种可能性。
-      </div>
-    </div>
-  </div>
-  ` : ''}
-
-  <div style="text-align: center; padding-top: 30px; border-top: 1px solid #eee; color: #999; font-size: 12px;">
-    <p>本报告仅供娱乐与文化研究，不依据科学标准，不应作为重大生活决策的依据。</p>
-    <p>请用户相信科学，拒绝迷信。</p>
-  </div>
-</div>
-    `;
-
-    res.json({
-      success: true,
-      htmlContent,
-      title: reportTitle,
-      summary
-    });
+    // 如果没有配置 Dify，标记任务失败
+    console.log(`[Dify] Task ${taskId}: No Dify config, marking as failed`);
+    const noConfigTask = difyTasks.get(taskId);
+    if (noConfigTask) {
+      noConfigTask.status = 'failed';
+      noConfigTask.error = '未配置 Dify API';
+    }
   } catch (error: any) {
-    console.error('[Dify] Report generation error:', error);
+    console.error('[Dify] Report submission error:', error);
     res.status(500).json({
       success: false,
-      error: error.message || '生成报告时发生未知错误'
+      error: error.message || '提交报告任务时发生错误'
+    });
+  }
+});
+
+// 查询 Dify 报告生成状态
+app.get('/api/dify/report/:taskId', (req, res) => {
+  const { taskId } = req.params;
+  const task = difyTasks.get(taskId);
+  
+  if (!task) {
+    return res.status(404).json({ success: false, error: '任务不存在' });
+  }
+
+  if (task.status === 'completed') {
+    res.json({
+      success: true,
+      status: 'completed',
+      progress: 100,
+      ...task.result
+    });
+  } else if (task.status === 'failed') {
+    res.json({
+      success: false,
+      status: 'failed',
+      error: task.error || '生成失败'
+    });
+  } else {
+    // 根据时间估算进度（8分钟 = 480秒）
+    const elapsed = (Date.now() - task.createdAt) / 1000;
+    const estimatedProgress = Math.min(90, Math.round(20 + (elapsed / 480) * 70));
+    task.progress = estimatedProgress;
+    
+    res.json({
+      success: true,
+      status: 'pending',
+      progress: estimatedProgress,
+      message: '报告正在生成中，请耐心等待...'
     });
   }
 });
