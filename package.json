@@ -7,7 +7,9 @@
     "dev": "npx tsx server.ts",
     "start": "NODE_ENV=production npx tsx server.ts",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
@@ -35,6 +37,7 @@
     "@types/node": "^22.14.0",
     "@types/node-cron": "^3.0.11",
     "@vitejs/plugin-react": "^5.0.0",
+    "prettier": "^3.8.1",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"

@@ -10,8 +10,6 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-# vendor 目录保留，用于无网络环境部署
-# vendor
 *.local
 
 # Environment files
@@ -43,3 +41,8 @@ cf.log
 cf_new.log
 cloudflare.log
 server.log
+
+# Build outputs
+build/
+.next/
+out/

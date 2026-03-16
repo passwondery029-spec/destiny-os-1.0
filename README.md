@@ -20,7 +20,7 @@
 
 ### 前置要求
 
-- Node.js 18+
+- Node.js 18+（推荐 24+）
 - npm 或 yarn
 
 ### 安装与运行
@@ -48,6 +48,7 @@ npm run dev
 |--------|------|------|
 | `SUPABASE_URL` | ✅ | Supabase 项目 URL |
 | `SUPABASE_ANON_KEY` | ✅ | Supabase Anon Key |
+| `SUPABASE_SERVICE_ROLE_KEY` | ❌ | Supabase Service Role Key（用于后台管理）|
 | `ARK_API_KEY` | ❌ | ARK API Key（用于 AI 生成报告）|
 | `ARK_ENDPOINT_ID` | ❌ | ARK Endpoint ID |
 | `EXTERNAL_REPORT_AGENT_URL` | ❌ | Dify 工作流地址（优先级高于 ARK）|
@@ -61,31 +62,39 @@ destiny-os/
 ├── services/         # 业务逻辑服务
 ├── server/          # 服务端代码
 ├── public/          # 静态资源
-├── vendor/          # 第三方库（已打包）
 ├── constants.ts     # 全局常量配置
-└── types.ts         # TypeScript 类型定义
+├── types.ts         # TypeScript 类型定义
+├── server.ts        # 主服务器入口
+└── index.html       # HTML 入口
 ```
 
 ## 技术栈
 
-- **前端**: React + TypeScript + Vite
-- **样式**: Tailwind CSS + Framer Motion
-- **后端**: Express + Node.js
+- **前端**: React 19 + TypeScript + Vite
+- **样式**: Framer Motion
+- **后端**: Express 5 + Node.js
 - **数据库**: Supabase
-- **AI**: Google Gemini / OpenAI / Dify
+- **AI**: Volcengine Ark (豆包) / Dify
+- **开发工具**: Prettier + EditorConfig
 
 ## 开发说明
 
-### vendor 目录
-
-项目包含预打包的 vendor 目录，可脱离 node_modules 运行：
+### 代码格式化
 
 ```bash
-# 使用 vendor 版本（无需 npm install）
-npm run start:vendor
+# 格式化所有代码
+npm run format
 
-# 使用标准版本（需要 npm install）
-npm run dev
+# 检查格式
+npm run format:check
+```
+
+### Node.js 版本
+
+推荐使用 Node.js 24+，项目包含 `.nvmrc` 文件：
+
+```bash
+nvm use
 ```
 
 ### 支付配置
