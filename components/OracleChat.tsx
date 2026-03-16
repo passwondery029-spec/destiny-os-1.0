@@ -95,10 +95,44 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     }, []);
 
     // Load History on Mount or Profile Change
+    // localStorage key for chat history
+    const getChatStorageKey = (profileId: string) => `destiny_chat_${profileId}`;
+
+    // Save to localStorage
+    const saveToLocalStorage = (msgs: ChatMessage[], profileId: string) => {
+        try {
+            localStorage.setItem(getChatStorageKey(profileId), JSON.stringify(msgs));
+        } catch (e) { console.error('localStorage save failed:', e); }
+    };
+
+    // Load from localStorage (fallback)
+    const loadFromLocalStorage = (profileId: string): ChatMessage[] | null => {
+        try {
+            const stored = localStorage.getItem(getChatStorageKey(profileId));
+            return stored ? JSON.parse(stored) : null;
+        } catch (e) { console.error('localStorage load failed:', e); return null; }
+    };
+
     useEffect(() => {
         if (!activeProfile) return;
         const loadHistory = async () => {
             setIsLoadingHistory(true);
+            
+            // 1️⃣ 优先从 localStorage 加载（最快）
+            const localMsgs = loadFromLocalStorage(activeProfile.id);
+            if (localMsgs && localMsgs.length > 0) {
+                console.log('[Chat] Loaded from localStorage:', localMsgs.length, 'messages');
+                const engineHistory = localMsgs.map(l => ({
+                    role: l.role === 'user' ? 'user' : 'assistant',
+                    content: l.text
+                }));
+                setMessages(localMsgs);
+                await initializeChat(activeProfile.id, engineHistory);
+                setIsLoadingHistory(false);
+                return;
+            }
+
+            // 2️⃣ Fallback 到 DB 加载
             try {
                 const { data: logs, error } = await supabase
                     .from('chat_logs')
@@ -118,11 +152,12 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                         text: l.text,
                         timestamp: l.timestamp
                     }));
-
                     engineHistory = logs.map(l => ({
                         role: l.role === 'user' ? 'user' : 'assistant',
                         content: l.text
                     }));
+                    // 同步到 localStorage
+                    saveToLocalStorage(loadedMessages, activeProfile.id);
                 } else {
                     loadedMessages = [{
                         role: 'model',
@@ -135,6 +170,12 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                 await initializeChat(activeProfile.id, engineHistory);
             } catch (e) {
                 console.error('Failed to load history:', e);
+                // Fallback 到默认欢迎语
+                setMessages([{
+                    role: 'model',
+                    text: '求道者，幸会。我是您的命运魔术师。今日星象变幻，您似乎有心事？不妨说来听听，也许我能为您从记忆的碎片中找到答案。',
+                    timestamp: Date.now()
+                }]);
             } finally {
                 setIsLoadingHistory(false);
             }
@@ -142,6 +183,17 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
         loadHistory();
     }, [activeProfile?.id]);
+
+    // 自动保存聊天记录到 localStorage（当 messages 变化时）
+    useEffect(() => {
+        if (activeProfile && messages.length > 0) {
+            // 排除初始欢迎语（如果是刚加载的默认消息则不覆盖已保存的历史）
+            const isDefaultWelcome = messages.length === 1 && messages[0].role === 'model' && messages[0].text.includes('幸会');
+            if (!isDefaultWelcome) {
+                saveToLocalStorage(messages, activeProfile.id);
+            }
+        }
+    }, [messages, activeProfile?.id]);
 
     // Handle Initial Prompt (Deep link from Dashboard)
     useEffect(() => {
