@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { sendMessageToOracle, generateReportContent, initializeChat } from '../services/geminiService';
+import { sendMessageToOracle, generateReportContent, initializeChat } from '../services/tianjiService';
 import { supabase } from '../services/supabaseClient';
 import { addReport } from '../services/reportService';
 import { getCurrentLevelConfig, addExp, canGenerateFreeReport, incrementReportCount } from '../services/levelService';

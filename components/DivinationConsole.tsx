@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { consultDiviner } from '../services/geminiService';
+import { consultDiviner } from '../services/tianjiService';
 import { SparklesIcon, ScaleIcon, ArrowPathIcon, ChevronLeftIcon } from '@heroicons/react/24/outline';
 
 const MotionDiv = motion.div as any;

@@ -112,7 +112,7 @@ const Layout: React.FC<LayoutProps> = ({ currentRoute, setRoute, children }) => 
           <footer className="mt-auto pt-12 pb-6 text-center space-y-2">
             <p className="text-[10px] text-stone-400 font-serif">
               天命系统 Destiny OS &copy; 2025 <br />
-              <span className="opacity-50">基于 Google Gemini 2.5 构建</span>
+              <span className="opacity-50">天机阁AI 提供技术支持</span>
             </p>
             <div className="flex flex-col items-center gap-1 text-[9px] text-stone-300">
               <p>京ICP备12345678号-1 | 京公网安备11010502030000号</p>
