@@ -93,40 +93,40 @@ function App() {
     setRoute(AppRoute.REPORT_DETAIL);
   };
 
-  const renderContent = () => {
-    switch (route) {
-      case AppRoute.DASHBOARD:
-        return <Dashboard onNavigateToChat={handleNavigateToOracle} />;
-      case AppRoute.ORACLE:
-        return (
-          <OracleChat
-            session={session}
-            initialPrompt={initialChatPrompt}
-            onPromptConsumed={() => setInitialChatPrompt(null)}
-            onNavigate={setRoute}
-            onViewReport={handleViewReport}
-          />
-        );
-      case AppRoute.DIVINATION:
-        return <DivinationConsole onBack={() => setRoute(AppRoute.ORACLE)} />;
-      case AppRoute.DATABASE:
-        return <LifeDatabase onViewReport={handleViewReport} />;
-      case AppRoute.MINE:
-        return <Mine session={session} />;
-      case AppRoute.REPORT_DETAIL:
-        return <ReportPage
-          report={selectedReport}
-          onBack={() => setRoute(previousRoute)}
-        />;
-      default:
-        return <Dashboard onNavigateToChat={handleNavigateToOracle} />;
-    }
-  };
+  // 简化渲染：保持所有页面挂载，用 hidden class 控制显隐
+  const renderAllPages = () => (
+    <>
+      <div className={route === AppRoute.DASHBOARD ? 'block' : 'hidden'}>
+        <Dashboard onNavigateToChat={handleNavigateToOracle} />
+      </div>
+      <div className={route === AppRoute.ORACLE ? 'block' : 'hidden'}>
+        <OracleChat
+          session={session}
+          initialPrompt={initialChatPrompt}
+          onPromptConsumed={() => setInitialChatPrompt(null)}
+          onNavigate={setRoute}
+          onViewReport={handleViewReport}
+        />
+      </div>
+      <div className={route === AppRoute.DIVINATION ? 'block' : 'hidden'}>
+        <DivinationConsole onBack={() => setRoute(AppRoute.ORACLE)} />
+      </div>
+      <div className={route === AppRoute.DATABASE ? 'block' : 'hidden'}>
+        <LifeDatabase onViewReport={handleViewReport} />
+      </div>
+      <div className={route === AppRoute.MINE ? 'block' : 'hidden'}>
+        <Mine session={session} />
+      </div>
+      <div className={route === AppRoute.REPORT_DETAIL ? 'block' : 'hidden'}>
+        <ReportPage report={selectedReport} onBack={() => setRoute(previousRoute)} />
+      </div>
+    </>
+  );
 
   return (
     <ErrorBoundary>
       <Layout currentRoute={route} setRoute={setRoute}>
-        {renderContent()}
+        {renderAllPages()}
       </Layout>
     </ErrorBoundary>
   );
