@@ -57,6 +57,8 @@ export const sendMessageToOracle = async (
     }
 
     const session = (await supabase.auth.getSession()).data.session;
+    const currentUserId = session?.user?.id;
+
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 
@@ -66,7 +68,7 @@ export const sendMessageToOracle = async (
       body: JSON.stringify({
         messages: messagesToSend,
         profileId: profileId,
-        userId: session?.user?.id,
+        userId: currentUserId,
         temperature: 0.7,
         levelConfig: levelConfig,
         displayText: displayText
@@ -87,6 +89,25 @@ export const sendMessageToOracle = async (
 
     // Add assistant response to history
     chatHistory.push({ role: 'assistant', content: replyText });
+
+    // 前端直接写入 DB（利用用户的 auth session 通过 RLS）
+    if (currentUserId && profileId) {
+      const now = Date.now();
+      const saveText = displayText || message;
+      
+      // 保存用户消息 + AI 回复
+      const rows = [
+        { profile_id: profileId, user_id: currentUserId, role: 'user', text: saveText, timestamp: now - 1 },
+        { profile_id: profileId, user_id: currentUserId, role: 'model', text: replyText, timestamp: now }
+      ];
+      
+      const { error: dbErr } = await supabase.from('chat_logs').insert(rows);
+      if (dbErr) {
+        console.error('[Frontend DB] Failed to save chat:', dbErr.message);
+      } else {
+        console.log('[Frontend DB] Chat saved successfully');
+      }
+    }
 
     return replyText;
   } catch (error) {

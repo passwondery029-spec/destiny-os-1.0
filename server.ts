@@ -23,6 +23,8 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // Admin client for auth bypass (requires service_role key)
 const supabaseAdmin = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null;
 
+console.log(`[Boot] supabaseUrl=${supabaseUrl ? 'OK' : 'MISSING'}, anonKey=${supabaseAnonKey ? 'OK' : 'MISSING'}, serviceKey=${supabaseServiceKey ? 'OK' : 'MISSING'}, supabaseAdmin=${supabaseAdmin ? 'YES' : 'NO (聊天记录写入将依赖用户 auth token 通过 RLS)'}`);
+
 const app = express();
 const PORT = 3000;
 
@@ -81,20 +83,25 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// 辅助函数：创建带用户身份的 DB client
+const getDbClient = (authToken?: string) => {
+  if (supabaseAdmin) return supabaseAdmin;
+  if (authToken) {
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${authToken}` } }
+    });
+  }
+  return supabase;
+};
+
 app.post('/api/chat', async (req, res) => {
   try {
     const { messages, systemInstruction, temperature, profileId, userId, levelConfig, displayText } = req.body;
     const authToken = req.headers.authorization?.replace('Bearer ', '');
     const client = getArkClient();
+    const dbClient = getDbClient(authToken);
     
-    // 创建带用户身份的 supabase client（通过 RLS）
-    let dbClient = supabaseAdmin || supabase;
-    if (!supabaseAdmin && authToken) {
-      const { createClient: createAuthClient } = await import('@supabase/supabase-js');
-      dbClient = createAuthClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: `Bearer ${authToken}` } }
-      });
-    }
+    console.log(`[Chat] profileId=${profileId}, userId=${userId}, hasAuthToken=${!!authToken}, usingAdmin=${!!supabaseAdmin}`);
 
     const apiMessages = [];
     if (systemInstruction) {
@@ -115,26 +122,15 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Save to database as chat history for memory extraction later
-    if (profileId) {
-      const lastUserMessage = messages[messages.length - 1]; // Only the latest sent by user
+    // 聊天记录保存已移至前端（利用用户 auth session 通过 RLS）
+    // 服务端仅在有 supabaseAdmin 时备份写入
+    if (supabaseAdmin && profileId) {
+      const lastUserMessage = messages[messages.length - 1];
       if (lastUserMessage && lastUserMessage.role === 'user') {
-        try {
-          // 如果有 displayText，存简洁的展示文本（避免把完整 prompt 暴露给用户）
-          const textToSave = displayText || lastUserMessage.content;
-          const { error: insertErr } = await dbClient.from('chat_logs').insert([{
-            profile_id: profileId,
-            user_id: userId,
-            role: 'user',
-            text: textToSave,
-            timestamp: Date.now()
-          }]);
-          if (insertErr) {
-            console.error('[DB] Failed to save user chat log:', insertErr.message);
-          }
-        } catch (dbErr) {
-          console.error('[DB] Exception saving user chat log:', dbErr);
-        }
+        const textToSave = displayText || lastUserMessage.content;
+        await supabaseAdmin.from('chat_logs').insert([{
+          profile_id: profileId, user_id: userId, role: 'user', text: textToSave, timestamp: Date.now()
+        }]).then(({ error }) => { if (error) console.error('[DB-Admin] user save err:', error.message); });
       }
     }
 
@@ -166,22 +162,12 @@ app.post('/api/chat', async (req, res) => {
       console.log(`[算力优化] 原回复 ${response.choices[0]?.message?.content?.length || 0} 字，优化为 ${replyText.length} 字`);
     }
 
-    // Save AI reply to database
-    if (profileId && replyText) {
-      try {
-        const { error: replyErr } = await dbClient.from('chat_logs').insert([{
-          profile_id: profileId,
-          user_id: userId,
-          role: 'model',
-          text: replyText,
-          timestamp: Date.now()
-        }]);
-        if (replyErr) {
-          console.error('[DB] Failed to save AI reply:', replyErr.message);
-        }
-      } catch (dbErr) {
-        console.error('[DB] Exception saving AI reply:', dbErr);
-      }
+    // AI 回复保存已移至前端（与用户消息一起批量写入，通过 RLS）
+    // 服务端仅在有 supabaseAdmin 时备份写入
+    if (supabaseAdmin && profileId && replyText) {
+      await supabaseAdmin.from('chat_logs').insert([{
+        profile_id: profileId, user_id: userId, role: 'model', text: replyText, timestamp: Date.now()
+      }]).then(({ error }) => { if (error) console.error('[DB-Admin] reply save err:', error.message); });
     }
 
     res.json({ text: replyText });
