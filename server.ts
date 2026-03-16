@@ -84,7 +84,17 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/chat', async (req, res) => {
   try {
     const { messages, systemInstruction, temperature, profileId, userId, levelConfig, displayText } = req.body;
+    const authToken = req.headers.authorization?.replace('Bearer ', '');
     const client = getArkClient();
+    
+    // 创建带用户身份的 supabase client（通过 RLS）
+    let dbClient = supabaseAdmin || supabase;
+    if (!supabaseAdmin && authToken) {
+      const { createClient: createAuthClient } = await import('@supabase/supabase-js');
+      dbClient = createAuthClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: `Bearer ${authToken}` } }
+      });
+    }
 
     const apiMessages = [];
     if (systemInstruction) {
@@ -106,8 +116,6 @@ app.post('/api/chat', async (req, res) => {
     }
 
     // Save to database as chat history for memory extraction later
-    // 使用 supabaseAdmin（绕过 RLS），fallback 到 supabase
-    const dbClient = supabaseAdmin || supabase;
     if (profileId) {
       const lastUserMessage = messages[messages.length - 1]; // Only the latest sent by user
       if (lastUserMessage && lastUserMessage.role === 'user') {

@@ -56,16 +56,20 @@ export const sendMessageToOracle = async (
       messagesToSend = [systemMessage, ...recentMessages];
     }
 
+    const session = (await supabase.auth.getSession()).data.session;
     const response = await fetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+      },
       body: JSON.stringify({
         messages: messagesToSend,
         profileId: profileId,
-        userId: (await supabase.auth.getSession()).data.session?.user?.id,
+        userId: session?.user?.id,
         temperature: 0.7,
         levelConfig: levelConfig,
-        displayText: displayText  // 简洁展示文本，存入 DB 给用户看
+        displayText: displayText
       })
     });
 
