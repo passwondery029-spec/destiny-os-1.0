@@ -2,9 +2,6 @@
 import { supabase } from './supabaseClient';
 import { addExp } from './levelService';
 
-/** 每份定制报告的价格（天机币） */
-export const REPORT_PRICE = 6;
-
 /** 充值档位配置 */
 export const RECHARGE_OPTIONS = [
     { price: 6, coins: 60, bonus: 0, label: '入门' },

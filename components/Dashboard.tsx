@@ -11,7 +11,8 @@ import { getProfiles } from '../services/profileService';
 import { supabase } from '../services/supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SparklesIcon, ArrowRightIcon, XMarkIcon, SunIcon, WalletIcon } from '@heroicons/react/24/outline';
-import { getBalance, deductBalance, REPORT_PRICE, addBalance } from '../services/walletService';
+import { getBalance, deductBalance, addBalance } from '../services/walletService';
+import { REPORT_TYPE_CONFIGS } from '../types';
 
 const MotionDiv = motion.div as any;
 const MotionButton = motion.button as any;
@@ -579,7 +580,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
                             <div className="p-6 text-center">
                                 <h3 className="text-xl font-bold font-serif text-stone-800 mb-2">天机币不足</h3>
                                 <p className="text-sm text-stone-500 mb-1">当前余额：<span className="font-bold text-[#B8860B]">{Math.floor(balance)} 天机币</span></p>
-                                <p className="text-sm text-stone-500 mb-6">定制报告消耗 <span className="font-bold">{REPORT_PRICE} 天机币</span>/份</p>
+                                <p className="text-sm text-stone-500 mb-6">定制报告消耗 <span className="font-bold">{REPORT_TYPE_CONFIGS.find(c => c.type === 'CUSTOM')?.cost || 20} 天机币</span>/份</p>
                                 <button
                                     onClick={() => setShowPaywall(false)}
                                     className="w-full py-3 bg-[#1F1F1F] text-[#B8860B] rounded-xl font-bold hover:bg-stone-800 shadow-md mb-3"
