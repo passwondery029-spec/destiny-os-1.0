@@ -65,10 +65,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
             const selfProfile = profiles.find(p => p.relation === 'SELF');
             const userBazi = selfProfile?.bazi;
             const userGender = selfProfile?.gender || 'MALE';
+            const userBirthDate = selfProfile?.birthDate;
+            const userBirthTime = selfProfile?.birthTime;
 
             supabase.auth.getSession().then(({ data: { session } }) => {
                 const userId = session?.user?.id || 'guest';
-                setFortune(generateDailyFortune(userId, userBazi, userGender));
+                setFortune(generateDailyFortune(userId, userBazi, userGender, userBirthDate, userBirthTime));
             });
         });
 
@@ -77,7 +79,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
             // We assume userGender and userBazi here are fetched earlier, but let's re-fetch to be safe if this fires later
             getProfiles().then(profiles => {
                 const selfProf = profiles.find(p => p.relation === 'SELF');
-                setFortune(generateDailyFortune(userId, selfProf?.bazi, selfProf?.gender || 'MALE'));
+                setFortune(generateDailyFortune(userId, selfProf?.bazi, selfProf?.gender || 'MALE', selfProf?.birthDate, selfProf?.birthTime));
             });
         });
 
@@ -129,13 +131,92 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
     const handleDetailedReport = async () => {
         if (!onNavigateToChat || !fortune) return;
 
+        // 获取用户的准确八字信息
+        const profiles = await getProfiles();
+        const selfProfile = profiles.find(p => p.relation === 'SELF');
+        const userBazi = selfProfile?.bazi || '未知';
+        const userName = selfProfile?.name || '求道者';
+        const userGender = selfProfile?.gender === 'MALE' ? '乾造（男）' : '坤造（女）';
+        const userBirthDate = selfProfile?.birthDate || '未知';
+        const userBirthTime = selfProfile?.birthTime || '未知';
+
+        // 构建详细的今日运势数据对象
+        const fortuneData = {
+            user: {
+                name: userName,
+                gender: userGender,
+                birthDate: userBirthDate,
+                birthTime: userBirthTime,
+                bazi: userBazi
+            },
+            today: {
+                score: fortune.score,
+                auspiciousness: fortune.auspiciousness,
+                liuRi: fortune.liuRi,
+                luckyElement: fortune.luckyElement,
+                luckyColorName: fortune.luckyColorName,
+                luckyAction: fortune.luckyAction,
+                brief: fortune.brief,
+                advice: fortune.advice,
+                notifText: fortune.notifText
+            },
+            outfitOptions: {
+                optionA: fortune.outfitOptionA,
+                optionB: fortune.outfitOptionB
+            }
+        };
+
+        // 构建包含所有数据的详细 prompt
+        const detailedPrompt = `【生成今日详细天命报告】
+
+【用户基本信息】
+- 姓名：${fortuneData.user.name}
+- 性别：${fortuneData.user.gender}
+- 出生日期：${fortuneData.user.birthDate}
+- 出生时辰：${fortuneData.user.birthTime}
+- 生辰八字：${fortuneData.user.bazi}
+
+【今日运势数据】
+- 今日流日：${fortuneData.today.liuRi}
+- 运势总分：${fortuneData.today.score}分
+- 运势评价：${fortuneData.today.auspiciousness}
+- 旺运五行：${fortuneData.today.luckyElement}
+- 幸运颜色：${fortuneData.today.luckyColorName}
+- 今日宜：${fortuneData.today.luckyAction}
+- 运势简语：${fortuneData.today.brief}
+- 行事建议：${fortuneData.today.advice}
+
+【穿搭方案】
+方案一（利事业正财）：
+- 帽子：${fortuneData.outfitOptions.optionA.colors.hat}
+- 上装：${fortuneData.outfitOptions.optionA.colors.top}
+- 下装：${fortuneData.outfitOptions.optionA.colors.bottom}
+- 鞋子：${fortuneData.outfitOptions.optionA.colors.shoes}
+- 说明：${fortuneData.outfitOptions.optionA.styleDesc}
+
+方案二（利创意社交）：
+- 帽子：${fortuneData.outfitOptions.optionB.colors.hat}
+- 上装：${fortuneData.outfitOptions.optionB.colors.top}
+- 下装：${fortuneData.outfitOptions.optionB.colors.bottom}
+- 鞋子：${fortuneData.outfitOptions.optionB.colors.shoes}
+- 说明：${fortuneData.outfitOptions.optionB.styleDesc}
+
+【任务要求】
+请根据以上用户的准确八字和今日运势数据，为用户生成一份约800字的详细今日天命报告。报告应包含：
+1. 基于八字的今日运势深度分析
+2. 针对今日流日的具体建议
+3. 穿搭方案的详细解读
+4. 事业、财运、感情等方面的提点
+
+请以命运魔术师的口吻，用专业且富有感染力的语言撰写这份报告。`;
+
         // 1️⃣ 先检查免费配额
         if (canGenerateFreeReport()) {
             incrementReportCount();
             const config = getCurrentLevelConfig();
             const levelState = getLevelState();
             setFreeReportsLeft(Math.max(0, config.freeReportQuota - levelState.todayReportCount));
-            onNavigateToChat(`请根据今日流日【${fortune.liuRi}】、今日运势（${fortune.score}分，${fortune.luckyElement}旺）和提供的两套穿搭方案，为我生成一份详细的今日天命报告。`);
+            onNavigateToChat(detailedPrompt);
             return;
         }
 
@@ -144,7 +225,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
         if (success) {
             setBalance(newBalance);
             incrementReportCount();
-            onNavigateToChat(`请根据今日流日【${fortune.liuRi}】、今日运势（${fortune.score}分，${fortune.luckyElement}旺）和提供的两套穿搭方案，为我生成一份详细的今日天命报告。`);
+            onNavigateToChat(detailedPrompt);
             return;
         }
 

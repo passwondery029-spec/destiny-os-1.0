@@ -2,34 +2,14 @@
 import { UserProfile } from '../types';
 import { MOCK_PROFILES } from './mockDataService';
 import { supabase } from './supabaseClient';
+import { calculateBazi } from './baziCalculator';
 
 const STORAGE_KEY = 'destiny_os_profiles';
 
-// Helper to simulate Bazi Calculation based on date
-// In a real app, this would involve complex lunar calendar algorithms
+// Helper to calculate real Bazi using our algorithm
 const calculateMockBazi = (dateStr: string, timeStr: string): string => {
-  const stems = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
-  const branches = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
-
-  const date = new Date(dateStr);
-  const year = date.getFullYear();
-  const day = date.getDate();
-
-  // Deterministic pseudo-random based on input
-  const yearIdx = (year - 4) % 10;
-  const yearBranchIdx = (year - 4) % 12;
-
-  const monthIdx = (date.getMonth() + 2) % 10;
-  const monthBranchIdx = (date.getMonth() + 2) % 12;
-
-  const dayIdx = day % 10;
-  const dayBranchIdx = day % 12;
-
-  const timeHour = parseInt(timeStr.split(':')[0] || '0');
-  const timeIdx = timeHour % 10;
-  const timeBranchIdx = Math.floor((timeHour + 1) / 2) % 12;
-
-  return `${stems[yearIdx]}${branches[yearBranchIdx]} ${stems[monthIdx]}${branches[monthBranchIdx]} ${stems[dayIdx]}${branches[dayBranchIdx]} ${stems[timeIdx]}${branches[timeBranchIdx]}`;
+  const bazi = calculateBazi(dateStr, timeStr);
+  return `${bazi.year.tiangan}${bazi.year.dizhi} ${bazi.month.tiangan}${bazi.month.dizhi} ${bazi.day.tiangan}${bazi.day.dizhi} ${bazi.time.tiangan}${bazi.time.dizhi}`;
 };
 
 // Get profiles completely sync from localStorage as fallback/initial state

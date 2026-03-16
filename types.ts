@@ -68,6 +68,7 @@ export interface OracleLevelConfig {
   maxMemoryContext: number; // How many memories AI can recall
   freeReportQuota: number; // Daily free reports
   unlockPrice?: number; // Price to instantly unlock (CNY)
+  maxMemoryCount: number; // Maximum number of memory fragments allowed
 }
 
 export interface UserLevelState {

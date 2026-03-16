@@ -268,7 +268,7 @@ async function runMemoryExtractionJob() {
   // 1. Fetch all distinct profile ideas that chatted today
   const { data: profilesData, error: profileErr } = await supabase
     .from('chat_logs')
-    .select('profile_id')
+    .select('profile_id, user_id')
     .gte('timestamp', startTimestamp);
 
   if (profileErr) {
@@ -281,14 +281,29 @@ async function runMemoryExtractionJob() {
     return;
   }
 
-  // Get unique profiles
-  const uniqueProfiles = [...new Set(profilesData.map(row => row.profile_id))];
+  // Get unique profiles with user_id
+  const uniqueProfiles = new Map();
+  profilesData.forEach(row => {
+    if (!uniqueProfiles.has(row.profile_id)) {
+      uniqueProfiles.set(row.profile_id, row.user_id);
+    }
+  });
 
   const client = getArkClient();
 
   // Process each profile
-  for (const profileId of uniqueProfiles) {
+  for (const [profileId, userId] of uniqueProfiles) {
     console.log(`[CRON] Extracting memories for profileId: ${profileId}`);
+    
+    // First, check memory limit based on user level
+    const memoryLimit = await getUserMemoryLimit(userId);
+    const { count: currentMemoryCount } = await supabase
+      .from('memories')
+      .select('*', { count: 'exact', head: true })
+      .eq('profile_id', profileId);
+    
+    console.log(`[CRON] Profile ${profileId} has ${currentMemoryCount || 0}/${memoryLimit} memories`);
+    
     // Fetch specific logs for this profile today
     const { data: logs, error: logsErr } = await supabase
       .from('chat_logs')
@@ -316,17 +331,51 @@ async function runMemoryExtractionJob() {
       const extractedMemories = JSON.parse(text);
 
       if (Array.isArray(extractedMemories) && extractedMemories.length > 0) {
-        // Insert into Supabase memory table
-        for (const mem of extractedMemories) {
-          await supabase.from('memories').insert([{
-            profile_id: profileId,
-            content: mem.content,
-            category: mem.category || 'EVENT',
-            timestamp: Date.now(),
-            confidence: 0.95
-          }]);
+        // 【硬约束】每天最多提取 8 条记忆，宁缺毋滥
+        const MAX_DAILY_MEMORIES = 8;
+        const limitedMemories = extractedMemories.slice(0, MAX_DAILY_MEMORIES);
+        
+        console.log(`[CRON] Extracted ${extractedMemories.length} memories, limited to ${limitedMemories.length} for quality control`);
+        
+        // Calculate how many new memories we can add
+        const availableSlots = memoryLimit - (currentMemoryCount || 0);
+        const memoriesToAdd = limitedMemories.slice(0, Math.max(0, availableSlots));
+        
+        if (memoriesToAdd.length > 0) {
+          // If over limit, delete oldest memories first
+          if ((currentMemoryCount || 0) + extractedMemories.length > memoryLimit) {
+            const memoriesToDelete = (currentMemoryCount || 0) + memoriesToAdd.length - memoryLimit;
+            if (memoriesToDelete > 0) {
+              const { data: oldestMemories } = await supabase
+                .from('memories')
+                .select('id')
+                .eq('profile_id', profileId)
+                .order('timestamp', { ascending: true })
+                .limit(memoriesToDelete);
+              
+              if (oldestMemories && oldestMemories.length > 0) {
+                const idsToDelete = oldestMemories.map(m => m.id);
+                await supabase.from('memories').delete().in('id', idsToDelete);
+                console.log(`[CRON] Deleted ${idsToDelete.length} old memories for ${profileId}`);
+              }
+            }
+          }
+          
+          // Insert into Supabase memory table
+          for (const mem of memoriesToAdd) {
+            await supabase.from('memories').insert([{
+              profile_id: profileId,
+              user_id: userId,
+              content: mem.content,
+              category: mem.category || 'EVENT',
+              timestamp: Date.now(),
+              confidence: 0.95
+            }]);
+          }
+          console.log(`[CRON] Successfully extracted ${memoriesToAdd.length} memories for ${profileId}`);
+        } else {
+          console.log(`[CRON] Memory limit reached for ${profileId}, skipping new memories`);
         }
-        console.log(`[CRON] Successfully extracted ${extractedMemories.length} memories for ${profileId}`);
       } else {
         console.log(`[CRON] No new core memories found for ${profileId} today.`);
       }
@@ -338,10 +387,77 @@ async function runMemoryExtractionJob() {
   console.log('[CRON] Memory Extraction Completed.');
 }
 
-// Scheduled Task
+// CHAT LOG CLEANUP LOGIC (keep only last 48 hours)
+async function runChatLogCleanupJob() {
+  console.log('[CRON] Starting Chat Log Cleanup...');
+  
+  // Calculate timestamp for 48 hours ago
+  const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
+  
+  try {
+    const { data: deletedLogs, error } = await supabase
+      .from('chat_logs')
+      .delete()
+      .lt('timestamp', fortyEightHoursAgo)
+      .select();
+    
+    if (error) {
+      console.error('[CRON] Failed to clean up chat logs:', error);
+    } else {
+      console.log(`[CRON] Cleaned up ${deletedLogs?.length || 0} chat logs older than 48 hours`);
+    }
+  } catch (e) {
+    console.error('[CRON] Error during chat log cleanup:', e);
+  }
+}
+
+// Level Configs (must match frontend constants.ts)
+const LEVEL_CONFIGS = [
+  { level: 1, title: '初窥门径', minExp: 0, maxMemoryContext: 5, freeReportQuota: 1, unlockPrice: 0, maxMemoryCount: 50 },
+  { level: 2, title: '炼气化神', minExp: 100, maxMemoryContext: 10, freeReportQuota: 2, unlockPrice: 6, maxMemoryCount: 100 },
+  { level: 3, title: '筑基修士', minExp: 300, maxMemoryContext: 20, freeReportQuota: 3, unlockPrice: 18, maxMemoryCount: 200 },
+  { level: 4, title: '金丹大成', minExp: 800, maxMemoryContext: 30, freeReportQuota: 5, unlockPrice: 68, maxMemoryCount: 300 },
+  { level: 5, title: '元婴老祖', minExp: 2000, maxMemoryContext: 50, freeReportQuota: 8, unlockPrice: 128, maxMemoryCount: 500 },
+  { level: 6, title: '化神尊者', minExp: 5000, maxMemoryContext: 80, freeReportQuota: 10, unlockPrice: 198, maxMemoryCount: 800 },
+  { level: 7, title: '返虚地仙', minExp: 10000, maxMemoryContext: 120, freeReportQuota: 15, unlockPrice: 328, maxMemoryCount: 1200 },
+  { level: 8, title: '大乘天仙', minExp: 25000, maxMemoryContext: 200, freeReportQuota: 20, unlockPrice: 648, maxMemoryCount: 2000 },
+  { level: 9, title: '九天玄仙', minExp: 50000, maxMemoryContext: 300, freeReportQuota: 30, unlockPrice: 1288, maxMemoryCount: 3000 },
+  { level: 10, title: '太上道祖', minExp: 100000, maxMemoryContext: 500, freeReportQuota: 50, unlockPrice: 0, maxMemoryCount: 9999 },
+];
+
+// Get user memory limit based on level
+async function getUserMemoryLimit(userId: string | null): Promise<number> {
+  if (!userId) return LEVEL_CONFIGS[0].maxMemoryCount;
+  
+  try {
+    // Try to get user level from metadata
+    const { data: { user } } = await supabase.auth.getUser(userId);
+    if (user?.user_metadata?.level) {
+      const userLevel = user.user_metadata.level;
+      const config = LEVEL_CONFIGS.find(c => c.level === userLevel);
+      if (config) return config.maxMemoryCount;
+    }
+  } catch (e) {
+    console.error('Error getting user level:', e);
+  }
+  
+  // Default to level 1 if no level found
+  return LEVEL_CONFIGS[0].maxMemoryCount;
+}
+
+// Scheduled Tasks
+// Daily memory extraction at 23:59
 cron.schedule('59 23 * * *', () => {
   runMemoryExtractionJob();
 });
+
+// Chat log cleanup every hour (keep only last 48 hours)
+cron.schedule('0 * * * *', () => {
+  runChatLogCleanupJob();
+});
+
+// Also run cleanup once on startup
+runChatLogCleanupJob();
 
 // Manual trigger API route for testing or forced extraction
 app.post('/api/admin/run-memory-extraction', async (req, res) => {
