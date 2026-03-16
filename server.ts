@@ -559,9 +559,22 @@ app.post('/api/dify/report', async (req, res) => {
           'CUSTOM': '定制深度报告'
         };
         
-        const xuqiu = customTopic 
-          ? `定制报告：${customTopic}`
-          : `生成${typeNames[reportType] || '深度命理报告'}`;
+        // bazi_input: 纯排盘信息
+        const baziInput = [
+          profile?.name ? `姓名：${profile.name}` : '',
+          profile?.gender ? `性别：${profile.gender === 'male' ? '男' : '女'}` : '',
+          profile?.birthDate ? `出生日期：${profile.birthDate}` : '',
+          profile?.birthTime ? `出生时间：${profile.birthTime}` : '',
+          profile?.bazi ? `八字：${profile.bazi}` : '',
+        ].filter(Boolean).join('\n');
+
+        // xuqiu: 报告需求 + 记忆碎片 + 自定义主题
+        const reportTypeName = typeNames[reportType] || '深度命理报告';
+        const xuqiuParts = [
+          `报告类型：${reportTypeName}`,
+          customTopic ? `定制主题：${customTopic}` : '',
+          memories ? `\n用户记忆碎片：\n${typeof memories === 'string' ? memories : JSON.stringify(memories)}` : '',
+        ].filter(Boolean).join('\n');
 
         // 更新进度
         const task = difyTasks.get(taskId);
@@ -571,6 +584,8 @@ app.post('/api/dify/report', async (req, res) => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 600000);
         
+        console.log(`[Dify] Task ${taskId} sending to Dify: bazi_input=${baziInput.substring(0, 50)}..., xuqiu=${xuqiuParts.substring(0, 80)}...`);
+        
         const difyResponse = await fetch(EXTERNAL_REPORT_AGENT_URL, {
           method: 'POST',
           headers: {
@@ -579,13 +594,8 @@ app.post('/api/dify/report', async (req, res) => {
           },
           body: JSON.stringify({
             inputs: {
-              xuqiu: xuqiu,
-              bazi_input: JSON.stringify({
-                profile,
-                memories,
-                reportType,
-                customTopic
-              })
+              bazi_input: baziInput,
+              xuqiu: xuqiuParts
             },
             response_mode: 'blocking',
             user: profile?.id || 'anonymous'
