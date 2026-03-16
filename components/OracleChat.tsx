@@ -206,6 +206,8 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             // 排除初始欢迎语（如果是刚加载的默认消息则不覆盖已保存的历史）
             const isDefaultWelcome = messages.length === 1 && messages[0].role === 'model' && messages[0].text.includes('幸会');
             if (!isDefaultWelcome) {
+                console.log('[Chat] Saving to localStorage, messages count:', messages.length, 
+                    'last msg role:', messages[messages.length - 1].role);
                 saveToLocalStorage(messages, activeProfile.id);
             }
         }
