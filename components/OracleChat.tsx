@@ -62,13 +62,20 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
     };
 
-    // Scroll to bottom only when NEW messages are added (not on initial history load)
+    // 滚动到底部：加载历史后 + 发送新消息后都要滚动
     const [lastMsgCount, setLastMsgCount] = useState(0);
     useEffect(() => {
-        // Logic: Only scroll if we are NOT loading history and the message count increased by 1 (likely a new message)
-        // If it jumped by more (like 1 -> 50), it's a history load, so stay at top.
-        if (!isLoadingHistory && messages.length > lastMsgCount && messages.length === lastMsgCount + 1 && lastMsgCount > 0) {
-            scrollToBottom();
+        // 加载完历史后滚动到底部（显示最新记录）
+        if (!isLoadingHistory && messages.length > 0) {
+            // 如果是从欢迎语变成有历史记录，或者消息数量大幅增加（加载历史）
+            if (lastMsgCount <= 1 || messages.length > lastMsgCount + 1) {
+                // 延迟一点确保 DOM 渲染完成
+                setTimeout(() => scrollToBottom(false), 100);
+            }
+            // 新增单条消息时也滚动
+            else if (messages.length > lastMsgCount) {
+                scrollToBottom();
+            }
         }
         setLastMsgCount(messages.length);
     }, [messages.length, isLoadingHistory]);
@@ -367,7 +374,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-110px)] relative overflow-hidden">
+        <div className="flex flex-col h-[calc(100vh-env(safe-area-inset-bottom)-110px)] lg:h-[calc(100vh-110px)] relative overflow-hidden pb-safe">
 
             {/* 1. TOP STATS BAR */}
             <div className="bg-white/80 backdrop-blur-sm border-b border-stone-200 p-3 flex justify-between items-center text-[10px] text-stone-500 font-serif mb-2 rounded-xl shadow-sm">
@@ -391,7 +398,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             </div>
 
             {/* 2. CHAT CONTAINER */}
-            <div className="flex-1 glass-panel rounded-2xl overflow-hidden border border-stone-200 shadow-sm flex flex-col relative">
+            <div className="flex-1 glass-panel rounded-2xl overflow-hidden border border-stone-200 shadow-sm flex flex-col relative mb-2">
                 {/* Chat Header - Compact */}
                 <div className="p-3 border-b border-stone-200 bg-white/50 flex items-center justify-between backdrop-blur-md relative z-20">
                     <div className="flex items-center gap-2">
@@ -546,15 +553,15 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                     </button>
                 </div>
 
-                {/* Input Area - Floating/Suspended for Mobile Safety */}
-                <div className="p-3 bg-transparent sticky bottom-0 z-30 mb-2">
-                    <div className="relative bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-stone-200 overflow-hidden">
+                {/* Input Area - Fixed bottom for mobile/desktop compatibility */}
+                <div className="p-3 bg-gradient-to-t from-white via-white to-transparent z-30 pb-[max(12px,env(safe-area-inset-bottom))]">
+                    <div className="relative bg-white rounded-2xl shadow-lg border border-stone-200 overflow-hidden">
                         <textarea
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyPress}
                             placeholder={messages.length <= 1 ? "请聊聊您的近况..." : `回复${activeProfile?.name || '...'}...`}
-                            className="w-full bg-transparent text-stone-800 rounded-2xl pl-4 pr-12 py-3 outline-none resize-none h-12 min-h-[48px] transition-all placeholder:text-stone-400 text-sm"
+                            className="w-full bg-transparent text-stone-800 rounded-2xl pl-4 pr-12 py-3 outline-none resize-none h-12 min-h-[48px] max-h-[120px] transition-all placeholder:text-stone-400 text-sm"
                             disabled={isSendingMessage || isGeneratingReport || !activeProfile}
                         />
                         <button
