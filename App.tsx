@@ -100,6 +100,7 @@ function App() {
       case AppRoute.ORACLE:
         return (
           <OracleChat
+            session={session}
             initialPrompt={initialChatPrompt}
             onPromptConsumed={() => setInitialChatPrompt(null)}
             onNavigate={setRoute}
@@ -111,7 +112,7 @@ function App() {
       case AppRoute.DATABASE:
         return <LifeDatabase onViewReport={handleViewReport} />;
       case AppRoute.MINE:
-        return <Mine />;
+        return <Mine session={session} />;
       case AppRoute.REPORT_DETAIL:
         return <ReportPage
           report={selectedReport}

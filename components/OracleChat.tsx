@@ -17,7 +17,10 @@ import { DestinyReport } from '../types';
 const MotionDiv = motion.div as any;
 const MotionButton = motion.button as any;
 
+import { Session } from '@supabase/supabase-js';
+
 interface OracleChatProps {
+    session?: Session | null;
     initialPrompt?: string | null;
     onPromptConsumed?: () => void;
     onNavigate?: (route: AppRoute) => void;

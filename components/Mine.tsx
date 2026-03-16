@@ -17,9 +17,14 @@ import { getBalance, getTransactions, Transaction } from '../services/walletServ
 
 const MotionDiv = motion.div as any;
 
-const Mine: React.FC = () => {
-    const [session, setSession] = useState<Session | null>(null);
-    const [isVerified, setIsVerified] = useState(false);
+interface MineProps {
+    session: Session | null;
+}
+
+const Mine: React.FC<MineProps> = ({ session: propSession }) => {
+    // 使用从 App 传入的 session，避免重复获取
+    const [session, setSession] = useState<Session | null>(propSession);
+    const [isVerified, setIsVerified] = useState(!!propSession?.user?.user_metadata?.is_verified);
     const [balance, setBalance] = useState(0);
     const [isLoadingBalance, setIsLoadingBalance] = useState(true);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -28,8 +33,8 @@ const Mine: React.FC = () => {
     const [isUpdating, setIsUpdating] = useState(false);
 
     // Account Security Form
-    const [emailInput, setEmailInput] = useState('');
-    const [phoneInput, setPhoneInput] = useState('');
+    const [emailInput, setEmailInput] = useState(propSession?.user?.email || '');
+    const [phoneInput, setPhoneInput] = useState(propSession?.user?.phone || '');
     const [passwordInput, setPasswordInput] = useState('');
 
     // Real Name Auth Form
@@ -49,19 +54,18 @@ const Mine: React.FC = () => {
         setIsLoadingBalance(false);
     }, []);
 
-    // Refresh level state on mount
+    // 初始化：使用 props 传入的 session，只在需要时监听变化
     useEffect(() => {
         setLevelState(getLevelState());
         refreshBalance();
 
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            if (session) {
-                setIsVerified(!!session.user.user_metadata?.is_verified);
-                setEmailInput(session.user.email || '');
-                setPhoneInput(session.user.phone || '');
-            }
-        });
+        // 优先使用 props 传入的 session
+        if (propSession) {
+            setSession(propSession);
+            setIsVerified(!!propSession.user.user_metadata?.is_verified);
+            setEmailInput(propSession.user.email || '');
+            setPhoneInput(propSession.user.phone || '');
+        }
 
         const {
             data: { subscription },
