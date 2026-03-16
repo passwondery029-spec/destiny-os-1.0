@@ -521,6 +521,22 @@ app.post('/api/dify/report', async (req, res) => {
     if (EXTERNAL_REPORT_AGENT_URL && EXTERNAL_REPORT_AGENT_KEY) {
       // 调用真实的 Dify API
       try {
+        // 构建 xuqiu 字段（需求描述）
+        const typeNames: Record<string, string> = {
+          'YEARLY': '2025流年运势',
+          'CAREER': '事业前程详批',
+          'WEALTH': '财库补全指引',
+          'CUSTOM': '定制深度报告'
+        };
+        
+        const xuqiu = customTopic 
+          ? `定制报告：${customTopic}`
+          : `生成${typeNames[reportType] || '深度命理报告'}`;
+        
+        // 设置 5 分钟超时（300000ms）
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000);
+        
         const difyResponse = await fetch(EXTERNAL_REPORT_AGENT_URL, {
           method: 'POST',
           headers: {
@@ -529,6 +545,7 @@ app.post('/api/dify/report', async (req, res) => {
           },
           body: JSON.stringify({
             inputs: {
+              xuqiu: xuqiu,
               bazi_input: JSON.stringify({
                 profile,
                 memories,
@@ -538,8 +555,11 @@ app.post('/api/dify/report', async (req, res) => {
             },
             response_mode: 'blocking',
             user: profile?.id || 'anonymous'
-          })
+          }),
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
 
         if (difyResponse.ok) {
           const difyData = await difyResponse.json();
