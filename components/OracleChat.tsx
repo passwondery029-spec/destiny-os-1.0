@@ -194,26 +194,8 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         } catch (error) {
             console.error('Chat Error:', error);
             
-            // 提供更详细的错误提示
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            let userFriendlyMsg = "天机混沌，连接中断。（网络错误）\n\n";
-            
-            if (errorMsg.includes('API key') || errorMsg.includes('authentication')) {
-                userFriendlyMsg += "🔑 可能原因：API Key 未配置或已过期\n";
-                userFriendlyMsg += "💡 请检查 .env.local 文件中的 ARK_API_KEY 配置";
-            } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
-                userFriendlyMsg += "🌐 可能原因：网络连接问题\n";
-                userFriendlyMsg += "💡 请检查网络连接或稍后重试";
-            } else if (errorMsg.includes('404') || errorMsg.includes('endpoint')) {
-                userFriendlyMsg += "📍 可能原因：API Endpoint 配置错误\n";
-                userFriendlyMsg += "💡 请检查 .env.local 文件中的 ARK_ENDPOINT_ID 配置";
-            } else if (errorMsg.includes('500') || errorMsg.includes('server')) {
-                userFriendlyMsg += "⚙️ 可能原因：服务器端错误\n";
-                userFriendlyMsg += "💡 请稍后重试或联系管理员";
-            } else {
-                userFriendlyMsg += `📋 错误详情：${errorMsg}\n`;
-                userFriendlyMsg += "💡 请检查后端服务是否正常运行";
-            }
+            // 对普通用户友好的错误提示
+            const userFriendlyMsg = "天机暂时混沌，稍后再试。\n\n如问题持续，请联系客服或稍后重试。";
             
             setMessages(prev => [...prev, {
                 role: 'model',

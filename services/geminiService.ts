@@ -60,7 +60,7 @@ export const sendMessageToOracle = async (message: string, profileId: string = '
     console.error("Ark API Error:", error);
     // Remove the failed user message from history
     chatHistory.pop();
-    return "The cosmic connection is disrupted. Please check your API key or network.";
+    return "连接暂时中断，请稍后再试。";
   }
 };
 
@@ -89,8 +89,8 @@ export const generateReportContent = async (topic: string, profileInfo: string, 
     console.error("Report Generation Failed", e);
     return {
       title: `${topic} - 命理详批`,
-      summary: "天机晦涩，无法生成详细摘要，但您可以查看对话记录。",
-      content: "由于宇宙能量波动，暂时无法生成详细报告。请稍后再试或直接与魔术师对话获取指引。"
+      summary: "报告生成中遇到小问题，请稍后再试。",
+      content: "暂时无法生成详细报告，请稍后再试或直接与魔术师对话获取指引。"
     };
   }
 }
@@ -117,6 +117,6 @@ export const consultDiviner = async (question: string, hexagramCode: string): Pr
     return data.text || "卦象混沌，请诚心再试。";
   } catch (e) {
     console.error("Divination Failed", e);
-    return "天机屏蔽，请稍后重试。";
+    return "连接暂时中断，请稍后再试。";
   }
 };
