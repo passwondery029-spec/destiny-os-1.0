@@ -2,7 +2,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const VENDOR_DIR = '/Users/dd/Fangtang_Workspace/destiny-os/vendor';
+// 动态获取当前文件所在目录
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const VENDOR_DIR = path.join(__dirname, 'vendor');
 
 export async function resolve(specifier, context, nextResolve) {
   // 0. Aggressively block and redirect any node_modules lookup
@@ -49,7 +52,7 @@ export async function resolve(specifier, context, nextResolve) {
   }
 
   // 2. Handle relative specifiers with extension resolution
-  if (specifier.startsWith('.') || specifier.startsWith('/Users/dd/Fangtang_Workspace/destiny-os')) {
+  if (specifier.startsWith('.') || specifier.startsWith(__dirname)) {
     try {
       const parentDir = context.parentURL ? path.dirname(fileURLToPath(context.parentURL)) : process.cwd();
       const resolvedPath = specifier.startsWith('.') ? path.resolve(parentDir, specifier) : specifier;
