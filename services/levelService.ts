@@ -53,27 +53,6 @@ export const getCurrentLevelConfig = (): OracleLevelConfig => {
     return LEVEL_CONFIGS.find(l => l.level === state.currentLevel) || LEVEL_CONFIGS[0];
 };
 
-export const canGenerateFreeReport = (): boolean => {
-    const state = getLevelState();
-    const config = getCurrentLevelConfig();
-    return state.todayReportCount < config.freeReportQuota;
-};
-
-export const incrementReportCount = (): void => {
-    const state = getLevelState();
-    state.todayReportCount += 1;
-    // Generating report gives lots of XP
-    state.currentExp += 50;
-    
-    // Check Level Up again logic (simplified duplication)
-    const nextLevel = LEVEL_CONFIGS.find(l => l.level === state.currentLevel + 1);
-    if (nextLevel && state.currentExp >= nextLevel.minExp) {
-        state.currentLevel += 1;
-    }
-    
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-};
-
 // 检查今天是否已生成过天命报告
 export const canGenerateTodayReport = (): boolean => {
     const state = getLevelState();

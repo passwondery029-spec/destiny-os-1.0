@@ -16,47 +16,42 @@ const getLocalReports = (): DestinyReport[] => {
   return JSON.parse(stored);
 };
 
-export const getReports = async (): Promise<DestinyReport[]> => {
+// 辅助函数：获取当前用户ID
+const getCurrentUserId = async (): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id || null;
+};
+
+export const getReports = async (profileId?: string): Promise<DestinyReport[]> => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('reports')
       .select('*')
       .order('date', { ascending: false });
+
+    // 如果指定了 profileId，按其筛选
+    if (profileId) {
+      query = query.eq('profile_id', profileId);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
     // Convert snake_case from DB to camelCase for frontend
     if (data && data.length > 0) {
-      return data.map(r => {
-        let parsedSummary = r.summary;
-        let parsedContent = r.content || '';
-        let parsedHtmlContent: string | undefined;
-        let parsedCost: number | undefined;
-        try {
-          const packed = JSON.parse(r.summary);
-          if (packed.brief) {
-            parsedSummary = packed.brief;
-            parsedContent = packed.full || parsedContent;
-            parsedHtmlContent = packed.html;
-            parsedCost = packed.cost;
-          }
-        } catch (e) {
-          // It was a normal string
-        }
-
-        return {
-          id: r.id,
-          profileId: r.profile_id || 'self',
-          title: r.title,
-          type: r.type,
-          summary: parsedSummary,
-          content: parsedContent,
-          htmlContent: parsedHtmlContent,
-          date: r.date,
-          tags: r.tags || [],
-          cost: parsedCost
-        };
-      });
+      return data.map(r => ({
+        id: r.id,
+        profileId: r.profile_id || 'self',
+        title: r.title,
+        type: r.type,
+        summary: r.summary || '',
+        content: r.content || '',
+        htmlContent: r.html_content,
+        date: r.date,
+        tags: r.tags || [],
+        cost: r.cost
+      }));
     }
 
     return getLocalReports(); // Fallback if DB is empty
@@ -90,24 +85,23 @@ export const addReport = async (
   };
 
   try {
-    // Pack summary, content, htmlContent, and cost together
-    const packedSummary = JSON.stringify({ 
-      brief: newReport.summary, 
-      full: newReport.content,
-      html: newReport.htmlContent,
-      cost: newReport.cost
-    });
+    // 获取当前用户ID
+    const userId = await getCurrentUserId();
 
-    // Insert into Supabase
+    // Insert into Supabase with correct column names
     const { error } = await supabase
       .from('reports')
       .insert([
         {
           id: newReport.id,
+          user_id: userId,
           profile_id: newReport.profileId,
           title: newReport.title,
           type: newReport.type,
-          summary: packedSummary,
+          summary: newReport.summary,
+          content: newReport.content,
+          html_content: newReport.htmlContent,
+          cost: newReport.cost,
           date: newReport.date,
           tags: newReport.tags
         }

@@ -1,6 +1,7 @@
 
 import { UserProfile } from '../types';
 import { getContextString } from './memoryService';
+import { supabase } from './supabaseClient';
 
 /**
  * Dify 服务调用模块
@@ -26,40 +27,113 @@ export interface DifyReportResponse {
   error?: string;
 }
 
-// ============ localStorage 持久化 ============
-const PENDING_TASK_KEY = 'dify_pending_task';
+// ============ 数据库持久化 (替代 localStorage) ============
 
 interface PendingTask {
+  id: string;
   taskId: string;
-  submittedAt: number; // timestamp
+  userId: string;
   reportType: string;
   customTopic?: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  submittedAt: Date;
 }
 
-/** 保存待处理任务到 localStorage */
-const savePendingTask = (task: PendingTask) => {
-  localStorage.setItem(PENDING_TASK_KEY, JSON.stringify(task));
+// 辅助函数：获取当前用户ID
+const getCurrentUserId = async (): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id || null;
 };
 
-/** 读取待处理任务 */
-const getPendingTask = (): PendingTask | null => {
-  const raw = localStorage.getItem(PENDING_TASK_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
+/** 保存待处理任务到数据库 */
+const savePendingTask = async (task: {
+  taskId: string;
+  reportType: string;
+  customTopic?: string;
+}): Promise<void> => {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    console.warn('No user logged in, task not saved to DB');
+    return;
+  }
+
+  const { error } = await supabase
+    .from('pending_tasks')
+    .insert({
+      user_id: userId,
+      task_id: task.taskId,
+      report_type: task.reportType,
+      custom_topic: task.customTopic,
+      status: 'pending',
+      submitted_at: new Date().toISOString()
+    });
+
+  if (error) {
+    console.error('Failed to save pending task:', error);
   }
 };
 
-/** 清除待处理任务 */
-const clearPendingTask = () => {
-  localStorage.removeItem(PENDING_TASK_KEY);
+/** 读取当前用户的待处理任务 */
+const getPendingTask = async (): Promise<PendingTask | null> => {
+  const userId = await getCurrentUserId();
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from('pending_tasks')
+    .select('*')
+    .eq('user_id', userId)
+    .in('status', ['pending', 'processing'])
+    .order('submitted_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Failed to get pending task:', error);
+    return null;
+  }
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    taskId: data.task_id,
+    userId: data.user_id,
+    reportType: data.report_type,
+    customTopic: data.custom_topic,
+    status: data.status,
+    submittedAt: new Date(data.submitted_at)
+  };
+};
+
+/** 更新任务状态 */
+const updateTaskStatus = async (
+  taskId: string,
+  status: 'pending' | 'processing' | 'completed' | 'failed',
+  errorMessage?: string
+): Promise<void> => {
+  const updateData: Record<string, unknown> = {
+    status,
+    updated_at: new Date().toISOString()
+  };
+  
+  if (errorMessage) {
+    updateData.error_message = errorMessage;
+  }
+
+  await supabase
+    .from('pending_tasks')
+    .update(updateData)
+    .eq('task_id', taskId);
+};
+
+/** 清除（标记完成或删除）待处理任务 */
+const clearPendingTask = async (taskId: string): Promise<void> => {
+  await updateTaskStatus(taskId, 'completed');
 };
 
 /**
  * 提交 Dify 报告生成任务（立即返回，不等待）
- * taskId 存入 localStorage，用户可离开页面
+ * taskId 存入数据库，用户可离开页面，跨设备可恢复
  */
 export const submitDifyReport = async (
   profile: UserProfile,
@@ -80,10 +154,9 @@ export const submitDifyReport = async (
     const data = await response.json();
     
     if (data.taskId) {
-      // 存入 localStorage，用户离开后回来还能查
-      savePendingTask({
+      // 存入数据库，用户离开后回来还能查
+      await savePendingTask({
         taskId: data.taskId,
-        submittedAt: Date.now(),
         reportType,
         customTopic
       });
@@ -105,16 +178,16 @@ export const submitDifyReport = async (
  * 如果不到 5 分钟，等到第 5 分钟再轮询
  */
 export const checkPendingReport = async (): Promise<DifyReportResponse | null> => {
-  const pending = getPendingTask();
+  const pending = await getPendingTask();
   if (!pending) return null;
 
-  const elapsed = Date.now() - pending.submittedAt;
+  const elapsed = Date.now() - pending.submittedAt.getTime();
   const FIVE_MINUTES = 5 * 60 * 1000;
   const MAX_WAIT = 12 * 60 * 1000; // 最多等 12 分钟
 
   // 超过 12 分钟的任务视为过期
   if (elapsed > MAX_WAIT) {
-    clearPendingTask();
+    await updateTaskStatus(pending.taskId, 'failed', '任务超时');
     return null;
   }
 
@@ -135,7 +208,7 @@ export const checkPendingReport = async (): Promise<DifyReportResponse | null> =
       const data = await response.json();
 
       if (data.status === 'completed') {
-        clearPendingTask();
+        await clearPendingTask(pending.taskId);
         return {
           success: true,
           htmlContent: data.htmlContent,
@@ -145,7 +218,7 @@ export const checkPendingReport = async (): Promise<DifyReportResponse | null> =
       }
 
       if (data.status === 'failed') {
-        clearPendingTask();
+        await updateTaskStatus(pending.taskId, 'failed', data.error);
         return { success: false, error: data.error || '报告生成失败' };
       }
     } catch (err) {
@@ -162,8 +235,8 @@ export const checkPendingReport = async (): Promise<DifyReportResponse | null> =
 /**
  * 检查是否有正在生成中的任务（不轮询，只检查状态）
  */
-export const hasPendingReport = (): PendingTask | null => {
-  return getPendingTask();
+export const hasPendingReport = async (): Promise<PendingTask | null> => {
+  return await getPendingTask();
 };
 
 /**

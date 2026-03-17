@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { sendMessageToOracle, generateReportContent, initializeChat } from '../services/tianjiService';
 import { supabase } from '../services/supabaseClient';
 import { addReport } from '../services/reportService';
-import { getCurrentLevelConfig, addExp, canGenerateFreeReport, incrementReportCount } from '../services/levelService';
+import { getCurrentLevelConfig, addExp } from '../services/levelService';
 import { ChatMessage, UserProfile, AppRoute } from '../types';
 import { getBalance, deductBalance, addBalance } from '../services/walletService';
 import { MOCK_PROFILES, USER_STATS } from '../services/mockDataService';
@@ -30,10 +30,10 @@ interface OracleChatProps {
 }
 
 const REPORT_ACTIONS = [
-    { label: '2025流年运势', prompt: '请为我生成一份2025乙巳年流年运势深度报告，包含事业、财运、感情三方面。', type: 'YEARLY' },
-    { label: '事业前程详批', prompt: '请详细推演我未来的事业发展路径，包含行业选择与升迁机会。', type: 'CAREER' },
-    { label: '财库补全指引', prompt: '请分析我的财运走势，并给出补财库的具体建议。', type: 'WEALTH' },
-    { label: '姻缘天定', prompt: '请为我分析姻缘感情运势，包含正缘时机、感情发展建议。', type: 'RELATIONSHIP' },
+    { label: '2025流年运势', prompt: '请为我生成一份2025乙巳年流年运势深度报告，包含事业、财运、感情三方面。', type: 'YEARLY', cost: 10 },
+    { label: '事业前程详批', prompt: '请详细推演我未来的事业发展路径，包含行业选择与升迁机会。', type: 'CAREER', cost: 10 },
+    { label: '财库补全指引', prompt: '请分析我的财运走势，并给出补财库的具体建议。', type: 'WEALTH', cost: 10 },
+    { label: '姻缘天定', prompt: '请为我分析姻缘感情运势，包含正缘时机、感情发展建议。', type: 'RELATIONSHIP', cost: 10 },
 ];
 
 const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed, onNavigate, onViewReport, currentRoute }) => {
@@ -397,15 +397,18 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     const handleQuickReport = async (action: typeof REPORT_ACTIONS[0]) => {
         if (isSendingMessage || isGeneratingReport) return;
 
-        if (!canGenerateFreeReport()) {
-            alert(`您的等级【${levelConfig.title}】今日免费报告次数已用尽。请升级或明日再来。`);
+        // 检查天机币余额
+        const currentBalance = getBalance();
+        const reportCost = action.cost;
+        if (currentBalance < reportCost) {
+            setShowPaywall(true);
             return;
         }
 
         // 1. Send message to Chat UI
         const userMsg: ChatMessage = {
             role: 'user',
-            text: `[生成报告] ${action.label}`,
+            text: `[生成报告] ${action.label} (消耗${reportCost}天机币)`,
             timestamp: Date.now()
         };
         setMessages(prev => [...prev, userMsg]);
@@ -413,6 +416,13 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         setIsGeneratingReport(true);
 
         try {
+            // 扣除天机币
+            const deductResult = await deductBalance(reportCost, `生成报告：${action.label}`, 'REPORT');
+            if (!deductResult.success) {
+                setMessages(prev => [...prev, { role: 'model', text: "天机币扣除失败，请重试。", timestamp: Date.now() }]);
+                return;
+            }
+
             // 2. Parallel: Get Chat Response AND Generate Report Metadata
             const profileInfo = `${activeProfile.name} (${activeProfile.bazi})`;
 
@@ -430,7 +440,6 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             );
 
             setLastGeneratedReport(newReport);
-            incrementReportCount(); // Consume quota and give big XP
 
             // Get Chat Response
             const chatResponse = await sendMessageToOracle(
@@ -456,21 +465,16 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
     const handleCustomReportPay = async () => {
         if (!customReportTopic.trim()) return;
-        setPaymentProcessing(true);
 
-        // Simulate Payment Delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
-        setPaymentProcessing(false);
-        setShowPayModal(false);
-
-        // Execute Generation
+        // 定制报告消耗20天机币
         const customAction = {
             label: '定制深度报告',
             prompt: `请针对以下主题为我生成深度命理报告：${customReportTopic}`,
-            type: 'K_LINE'
+            type: 'K_LINE',
+            cost: 20
         };
 
+        setShowPayModal(false);
         setCustomReportTopic(''); // Reset
         handleQuickReport(customAction);
     };
@@ -487,10 +491,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                         </div>
                         <div>
                             <span className="block font-bold text-[#1F1F1F] text-xs">{levelConfig.title}</span>
-                            <div className="flex gap-3">
-                                <span>报告: {Math.max(0, levelConfig.freeReportQuota - (canGenerateFreeReport() ? 0 : 999))}/{levelConfig.freeReportQuota}</span>
-                                <span className="text-[#B8860B]">算力: {levelConfig.computingPowerPercent}%</span>
-                            </div>
+                            <span className="text-[#B8860B]">算力: {levelConfig.computingPowerPercent}%</span>
                         </div>
                     </div>
                 </div>

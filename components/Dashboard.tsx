@@ -5,7 +5,7 @@ import {
     AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid
 } from 'recharts';
 import { THEME_COLORS } from '../constants';
-import { getLevelState, canGenerateFreeReport, incrementReportCount, getCurrentLevelConfig, canGenerateTodayReport, markTodayReportGenerated } from '../services/levelService';
+import { getLevelState, getCurrentLevelConfig, canGenerateTodayReport, markTodayReportGenerated } from '../services/levelService';
 import { generateDailyFortune, DailyFortune } from '../services/fortuneService';
 import { getProfiles } from '../services/profileService';
 import { supabase } from '../services/supabaseClient';
