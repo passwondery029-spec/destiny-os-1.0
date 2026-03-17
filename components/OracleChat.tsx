@@ -5,6 +5,7 @@ import { supabase } from '../services/supabaseClient';
 import { addReport } from '../services/reportService';
 import { getCurrentLevelConfig, addExp, canGenerateFreeReport, incrementReportCount } from '../services/levelService';
 import { ChatMessage, UserProfile, AppRoute } from '../types';
+import { getBalance, deductBalance, addBalance } from '../services/walletService';
 import { MOCK_PROFILES, USER_STATS } from '../services/mockDataService';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -32,6 +33,7 @@ const REPORT_ACTIONS = [
     { label: '2025流年运势', prompt: '请为我生成一份2025乙巳年流年运势深度报告，包含事业、财运、感情三方面。', type: 'YEARLY' },
     { label: '事业前程详批', prompt: '请详细推演我未来的事业发展路径，包含行业选择与升迁机会。', type: 'CAREER' },
     { label: '财库补全指引', prompt: '请分析我的财运走势，并给出补财库的具体建议。', type: 'WEALTH' },
+    { label: '姻缘天定', prompt: '请为我分析姻缘感情运势，包含正缘时机、感情发展建议。', type: 'RELATIONSHIP' },
 ];
 
 const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed, onNavigate, onViewReport, currentRoute }) => {
@@ -55,6 +57,10 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     const [showPayModal, setShowPayModal] = useState(false);
     const [customReportTopic, setCustomReportTopic] = useState('');
     const [paymentProcessing, setPaymentProcessing] = useState(false);
+
+    // 天机币状态
+    const [balance, setBalance] = useState(0);
+    const [messageCount, setMessageCount] = useState(0); // 消息计数，用于返还逻辑
 
     // Level State
     const levelConfig = getCurrentLevelConfig();
@@ -125,6 +131,15 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             }
         };
         initProfiles();
+    }, []);
+
+    // Load balance on mount
+    useEffect(() => {
+        const loadBalance = async () => {
+            const b = await getBalance();
+            setBalance(b);
+        };
+        loadBalance();
     }, []);
 
     // Load History on Mount or Profile Change
@@ -294,6 +309,48 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         addExp(5);
 
         try {
+            // 天机币消耗逻辑：每发1条消息扣1币
+            const currentBalance = await getBalance();
+            if (currentBalance < 1) {
+                // 余额不足，提示用户
+                setMessages(prev => [...prev, {
+                    role: 'model',
+                    text: '天机币不足！请前往「我的」页面充值后继续咨询。',
+                    timestamp: Date.now()
+                }]);
+                setIsSendingMessage(false);
+                return;
+            }
+
+            // 扣除1天机币
+            const deductResult = await deductBalance(1, '天机阁消息');
+            if (!deductResult.success) {
+                setMessages(prev => [...prev, {
+                    role: 'model',
+                    text: '天机币扣除失败，请稍后重试。',
+                    timestamp: Date.now()
+                }]);
+                setIsSendingMessage(false);
+                return;
+            }
+            setBalance(deductResult.newBalance);
+
+            // 消息计数 +1
+            const newMessageCount = messageCount + 1;
+            setMessageCount(newMessageCount);
+
+            // 天机币返还逻辑：每发5条消息返还1币
+            if (newMessageCount % 5 === 0) {
+                const newBalance = await addBalance(1, '消息返还');
+                setBalance(newBalance);
+                // 可以给用户一个提示
+                setMessages(prev => [...prev, {
+                    role: 'model',
+                    text: '🎉 已返还1枚天机币！继续咨询吧~',
+                    timestamp: Date.now()
+                }]);
+            }
+
             // Prepend context about WHO is being asked about
             // 注意：发给 API 的是完整的 text，不是 displayText
             const contextAwarePrompt = `[当前咨询对象：${activeProfile.name}, 关系：${activeProfile.relation}, 八字：${activeProfile.bazi || '未知'}, 当前AI等级: ${levelConfig.title}] ${text}`;
@@ -437,8 +494,14 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                         </div>
                     </div>
                 </div>
-                <div className="text-right opacity-60">
-                    魔术师在线<br />引导回忆
+                <div className="flex items-center gap-4">
+                    <div className="text-right">
+                        <span className="text-[#B8860B] font-bold text-sm">{Math.floor(balance)}</span>
+                        <span className="text-stone-400 ml-1">天机币</span>
+                    </div>
+                    <div className="text-right opacity-60">
+                        魔术师在线<br />引导回忆
+                    </div>
                 </div>
             </div>
 

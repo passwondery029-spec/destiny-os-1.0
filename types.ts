@@ -64,6 +64,7 @@ export const REPORT_TYPE_CONFIGS: ReportTypeConfig[] = [
   { type: 'YEARLY', label: '2025流年运势', prompt: '请为我生成一份2025乙巳年流年运势深度报告，包含事业、财运、感情三方面。', cost: 10 },
   { type: 'CAREER', label: '事业前程详批', prompt: '请详细推演我未来的事业发展路径，包含行业选择与升迁机会。', cost: 10 },
   { type: 'WEALTH', label: '财库补全指引', prompt: '请分析我的财运走势，并给出补财库的具体建议。', cost: 10 },
+  { type: 'RELATIONSHIP', label: '姻缘天定', prompt: '请为我分析姻缘感情运势，包含正缘时机、感情发展建议。', cost: 10 },
   { type: 'CUSTOM', label: '定制深度报告', prompt: '', cost: 20 },
 ];
 
