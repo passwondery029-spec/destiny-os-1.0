@@ -242,7 +242,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                         <div className="w-full h-2 bg-stone-700 rounded-full overflow-hidden mb-2">
                             <div
                                 className="h-full bg-gradient-to-r from-[#B8860B] to-yellow-600"
-                                style={{ width: `${Math.min(100, (levelState.currentExp / nextConfig.minExp) * 100)}%` }}
+                                style={{ width: `${Math.min(100, (levelState.exp / nextConfig.minExp) * 100)}%` }}
                             ></div>
                         </div>
                         <div className="flex justify-between text-[10px] text-stone-400">
