@@ -2,11 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { sendMessageToOracle, generateReportContent, initializeChat } from '../services/tianjiService';
 import { supabase } from '../services/supabaseClient';
-import { addReport } from '../services/reportService';
-import { getCurrentLevelConfig, addExp } from '../services/levelService';
-import { LEVEL_CONFIGS } from '../constants';
-import { ChatMessage, UserProfile, AppRoute, OracleLevelConfig } from '../types';
-import { getBalance, deductBalance, addBalance } from '../services/walletService';
+import { useUserData } from '../contexts/UserDataContext';
+import { ChatMessage, UserProfile, AppRoute } from '../types';
 import { MOCK_PROFILES, USER_STATS } from '../services/mockDataService';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -38,6 +35,17 @@ const REPORT_ACTIONS = [
 ];
 
 const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed, onNavigate, onViewReport, currentRoute }) => {
+    // 从 Context 获取数据
+    const { 
+        balance, 
+        levelConfig, 
+        profiles,
+        deductBalance, 
+        addBalance, 
+        addExp, 
+        addReport 
+    } = useUserData();
+    
     const [messages, setMessages] = useState<ChatMessage[]>([
         {
             role: 'model',
@@ -58,13 +66,8 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     const [showPayModal, setShowPayModal] = useState(false);
     const [customReportTopic, setCustomReportTopic] = useState('');
 
-
-    // 天机币状态
-    const [balance, setBalance] = useState(0);
-    const [messageCount, setMessageCount] = useState(0); // 消息计数，用于返还逻辑
-
-    // Level State
-    const [levelConfig, setLevelConfig] = useState<OracleLevelConfig>(LEVEL_CONFIGS[0]);
+    // 消息计数，用于返还逻辑
+    const [messageCount, setMessageCount] = useState(0);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const hasProcessedPrompt = useRef(false);
@@ -132,20 +135,6 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             }
         };
         initProfiles();
-    }, []);
-
-    // Load balance on mount
-    useEffect(() => {
-        const loadBalance = async () => {
-            const b = await getBalance();
-            setBalance(b);
-        };
-        loadBalance();
-        
-        // 加载等级配置
-        getCurrentLevelConfig().then(config => {
-            setLevelConfig(config);
-        });
     }, []);
 
     // Load History on Mount or Profile Change
@@ -316,8 +305,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
         try {
             // 天机币消耗逻辑：每发1条消息扣1币
-            const currentBalance = await getBalance();
-            if (currentBalance < 1) {
+            if (balance < 1) {
                 // 余额不足，提示用户
                 setMessages(prev => [...prev, {
                     role: 'model',
@@ -328,7 +316,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                 return;
             }
 
-            // 扣除1天机币
+            // 扣除1天机币（Context 会自动更新 balance）
             const deductResult = await deductBalance(1, '天机阁消息');
             if (!deductResult.success) {
                 setMessages(prev => [...prev, {
@@ -339,16 +327,14 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                 setIsSendingMessage(false);
                 return;
             }
-            setBalance(deductResult.newBalance);
 
             // 消息计数 +1
             const newMessageCount = messageCount + 1;
             setMessageCount(newMessageCount);
 
-            // 天机币返还逻辑：每发5条消息返还1币
+            // 天机币返还逻辑：每发5条消息返还1币（Context 会自动更新 balance）
             if (newMessageCount % 5 === 0) {
-                const newBalance = await addBalance(1, '消息返还', 'RECHARGE');
-                setBalance(newBalance);
+                await addBalance(1, '消息返还', 'RECHARGE');
                 // 可以给用户一个提示
                 setMessages(prev => [...prev, {
                     role: 'model',
@@ -403,10 +389,9 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     const handleQuickReport = async (action: typeof REPORT_ACTIONS[0]) => {
         if (isSendingMessage || isGeneratingReport) return;
 
-        // 检查天机币余额
-        const currentBalance = getBalance();
+        // 检查天机币余额（直接使用 Context 的 balance）
         const reportCost = action.cost;
-        if (currentBalance < reportCost) {
+        if (balance < reportCost) {
             setShowPaywall(true);
             return;
         }

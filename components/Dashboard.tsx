@@ -5,13 +5,11 @@ import {
     AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid
 } from 'recharts';
 import { THEME_COLORS } from '../constants';
-import { canGenerateTodayReport, markTodayReportGenerated, addExp } from '../services/levelService';
+import { canGenerateTodayReport, markTodayReportGenerated } from '../services/levelService';
 import { generateDailyFortune, DailyFortune } from '../services/fortuneService';
-import { getProfiles } from '../services/profileService';
-import { supabase } from '../services/supabaseClient';
+import { useUserData } from '../contexts/UserDataContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SparklesIcon, ArrowRightIcon, XMarkIcon, SunIcon, WalletIcon } from '@heroicons/react/24/outline';
-import { getBalance, deductBalance, addBalance } from '../services/walletService';
 import { REPORT_TYPE_CONFIGS } from '../types';
 
 const MotionDiv = motion.div as any;
@@ -47,8 +45,15 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
+    // 从 Context 获取数据
+    const { 
+        balance, 
+        profiles, 
+        addBalance,
+        session 
+    } = useUserData();
+    
     const [fortune, setFortune] = useState<DailyFortune | null>(null);
-    const [balance, setBalance] = useState(0);
     const [showPaywall, setShowPaywall] = useState(false); // 充値提示弹窗
     const [isGenerating, setIsGenerating] = useState(false); // 正在生成报告的状态
     const [todayReportGenerated, setTodayReportGenerated] = useState(false); // 今日是否已生成报告
@@ -66,28 +71,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
             setTodayReportGenerated(!canGenerate);
         });
         
-        // Initialize Fortune
-        getProfiles().then(profiles => {
-            const selfProfile = profiles.find(p => p.relation === 'SELF');
-            const userBazi = selfProfile?.bazi;
-            const userGender = selfProfile?.gender || 'MALE';
-            const userBirthDate = selfProfile?.birthDate;
-            const userBirthTime = selfProfile?.birthTime;
-
-            supabase.auth.getSession().then(({ data: { session } }) => {
-                const userId = session?.user?.id || 'guest';
-                setFortune(generateDailyFortune(userId, userBazi, userGender, userBirthDate, userBirthTime));
-            });
-        });
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        // Initialize Fortune - 从 Context 的 profiles 生成
+        const selfProfile = profiles.find(p => p.relation === 'SELF');
+        if (selfProfile) {
             const userId = session?.user?.id || 'guest';
-            // We assume userGender and userBazi here are fetched earlier, but let's re-fetch to be safe if this fires later
-            getProfiles().then(profiles => {
-                const selfProf = profiles.find(p => p.relation === 'SELF');
-                setFortune(generateDailyFortune(userId, selfProf?.bazi, selfProf?.gender || 'MALE', selfProf?.birthDate, selfProf?.birthTime));
-            });
-        });
+            setFortune(generateDailyFortune(
+                userId, 
+                selfProfile.bazi, 
+                selfProfile.gender || 'MALE', 
+                selfProfile.birthDate, 
+                selfProfile.birthTime
+            ));
+        }
 
         // Check if we showed the daily notification today
         const lastNotif = localStorage.getItem('destiny_os_last_daily_notif');
@@ -112,12 +107,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
         } else {
             localStorage.setItem(fishClickKey, JSON.stringify({ date: today, count: 0 }));
         }
-
-        // Load balance
-        getBalance().then(b => setBalance(b));
-
-        return () => subscription.unsubscribe();
-    }, []);
+    }, [profiles, session]);
 
     const handleCloseNotif = () => {
         setShowDailyNotif(false);
@@ -143,10 +133,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
         const today = new Date().toISOString().split('T')[0];
         localStorage.setItem('destiny_os_fish_click', JSON.stringify({ date: today, count: newClickCount }));
         
-        // 每10次获得1枚天机币
+        // 每10次获得1枚天机币（Context 会自动更新 balance）
         if (newClickCount % 10 === 0) {
             addBalance(1, '木鱼诵经', 'WOODEN_FISH');
-            setBalance(b => b + 1);
         }
     };
 
@@ -156,8 +145,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
         setIsGenerating(true);
 
         try {
-            // 获取用户的准确八字信息
-            const profiles = await getProfiles();
+            // 从 Context 获取用户档案
             const selfProfile = profiles.find(p => p.relation === 'SELF');
             const userBazi = selfProfile?.bazi || '未知';
             const userName = selfProfile?.name || '求道者';

@@ -9,11 +9,11 @@ import {
     ArrowTrendingUpIcon
 } from '@heroicons/react/24/outline';
 import { CheckBadgeIcon } from '@heroicons/react/24/solid';
-import { getLevelState, getCurrentLevelConfig, UserLevelState } from '../services/levelService';
+import { useUserData } from '../contexts/UserDataContext';
 import { LEVEL_CONFIGS } from '../constants';
 import { supabase } from '../services/supabaseClient';
 import { Session } from '@supabase/supabase-js';
-import { getBalance, getTransactions, Transaction, addBalance, RECHARGE_OPTIONS } from '../services/walletService';
+import { RECHARGE_OPTIONS } from '../services/walletService';
 import { WalletIcon } from '@heroicons/react/24/outline';
 
 const MotionDiv = motion.div as any;
@@ -23,81 +23,47 @@ interface MineProps {
 }
 
 const Mine: React.FC<MineProps> = ({ session: propSession }) => {
-    // 使用从 App 传入的 session，避免重复获取
-    const [session, setSession] = useState<Session | null>(propSession);
-    const [isVerified, setIsVerified] = useState(!!propSession?.user?.user_metadata?.is_verified);
-    const [balance, setBalance] = useState(0);
-    const [isLoadingBalance, setIsLoadingBalance] = useState(true);
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    // 从 Context 获取数据
+    const { 
+        session: contextSession,
+        balance,
+        isLoadingBalance,
+        transactions,
+        levelState,
+        levelConfig,
+        addBalance,
+        refreshBalance
+    } = useUserData();
+    
+    // 使用 Context 的 session（优先）或 props 的 session
+    const session = contextSession || propSession;
+    
+    const [isVerified, setIsVerified] = useState(!!session?.user?.user_metadata?.is_verified);
     const [activeModal, setActiveModal] = useState<'NONE' | 'USER_AGREEMENT' | 'PRIVACY' | 'FEEDBACK' | 'ACCOUNT_SECURITY' | 'REAL_NAME_AUTH' | 'TRANSACTIONS' | 'LEVEL_PRIVILEGES' | 'RECHARGE'>('NONE');
     const [notifEnabled, setNotifEnabled] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
 
     // Account Security Form
-    const [emailInput, setEmailInput] = useState(propSession?.user?.email || '');
-    const [phoneInput, setPhoneInput] = useState(propSession?.user?.phone || '');
+    const [emailInput, setEmailInput] = useState(session?.user?.email || '');
+    const [phoneInput, setPhoneInput] = useState(session?.user?.phone || '');
     const [passwordInput, setPasswordInput] = useState('');
 
     // Real Name Auth Form
     const [realNameInput, setRealNameInput] = useState('');
     const [idCardInput, setIdCardInput] = useState('');
 
-    // Level State
-    const [levelState, setLevelState] = useState<UserLevelState>({
-        level: 1,
-        exp: 0,
-        totalExp: 0,
-        lastLoginDate: '',
-        lastDailyReportDate: ''
-    });
-    const [currentConfig, setCurrentConfig] = useState(LEVEL_CONFIGS[0]);
+    // Level State from Context
+    const currentConfig = levelConfig;
     const nextConfig = LEVEL_CONFIGS.find(l => l.level === currentConfig.level + 1);
 
-    const refreshBalance = useCallback(async () => {
-        setIsLoadingBalance(true);
-        const b = await getBalance();
-        setBalance(b);
-        setTransactions(await getTransactions());
-        setIsLoadingBalance(false);
-    }, []);
-
-    // 初始化：使用 props 传入的 session，只在需要时监听变化
+    // 初始化表单数据
     useEffect(() => {
-        // 异步加载等级状态
-        getLevelState().then(state => {
-            setLevelState(state);
-            const config = LEVEL_CONFIGS.find(l => l.level === state.level) || LEVEL_CONFIGS[0];
-            setCurrentConfig(config);
-        });
-        refreshBalance();
-
-        // 优先使用 props 传入的 session
-        if (propSession) {
-            setSession(propSession);
-            setIsVerified(!!propSession.user.user_metadata?.is_verified);
-            setEmailInput(propSession.user.email || '');
-            setPhoneInput(propSession.user.phone || '');
+        if (session) {
+            setIsVerified(!!session.user.user_metadata?.is_verified);
+            setEmailInput(session.user.email || '');
+            setPhoneInput(session.user.phone || '');
         }
-
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-            if (session) {
-                setIsVerified(!!session.user.user_metadata?.is_verified);
-                setEmailInput(session.user.email || '');
-                setPhoneInput(session.user.phone || '');
-                refreshBalance();
-            } else {
-                setIsVerified(false);
-                setEmailInput('');
-                setPhoneInput('');
-                setBalance(0);
-            }
-        });
-
-        return () => subscription.unsubscribe();
-    }, [refreshBalance]);
+    }, [session]);
 
     const handleUpdateSecurity = async () => {
         if (!session) return;
@@ -181,7 +147,6 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
 
     const handleDeleteAccount = () => {
         if (confirm('【高风险操作】您确定要注销账号吗？\n\n依据《个人信息保护法》，注销后您的所有档案、记忆碎片及剩余天机币将被永久删除且无法恢复。')) {
-            setBalance(0);
             alert('账号已注销，相关数据已从服务器物理删除。');
             supabase.auth.signOut();
         }
@@ -477,8 +442,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                                                     key={idx}
                                                     onClick={async () => {
                                                         const totalCoins = option.coins + option.bonus;
-                                                        const newBalance = await addBalance(totalCoins, `${option.label}充值`, 'RECHARGE');
-                                                        setBalance(newBalance);
+                                                        await addBalance(totalCoins, `${option.label}充值`, 'RECHARGE');
                                                         alert(`充值成功！获得 ${totalCoins} 天机币！`);
                                                         setActiveModal('NONE');
                                                     }}

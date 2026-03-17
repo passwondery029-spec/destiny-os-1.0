@@ -1,7 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
-import { supabase } from './services/supabaseClient';
-import { Session } from '@supabase/supabase-js';
+import React from 'react';
 import Auth from './components/Auth';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -11,6 +8,7 @@ import Mine from './components/Mine';
 import DivinationConsole from './components/DivinationConsole';
 import ReportPage from './components/ReportPage';
 import { AppRoute, DestinyReport } from './types';
+import { UserDataProvider, useUserData } from './contexts/UserDataContext';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: any) {
@@ -37,38 +35,13 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 }
 
-function App() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [isInitializing, setIsInitializing] = useState(true);
-  const [route, setRoute] = useState<AppRoute>(AppRoute.DASHBOARD);
-  const [initialChatPrompt, setInitialChatPrompt] = useState<string | null>(null);
-  const [selectedReport, setSelectedReport] = useState<DestinyReport | null>(null);
-  const [previousRoute, setPreviousRoute] = useState<AppRoute>(AppRoute.DASHBOARD);
-
-  useEffect(() => {
-    // Initial session check
-    const checkSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setSession(session);
-      } catch (err) {
-        console.error('Session check failed:', err);
-      } finally {
-        setIsInitializing(false);
-      }
-    };
-
-    checkSession();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setIsInitializing(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+// 内部组件：使用 Context 数据
+function AppContent() {
+  const { session, isInitializing } = useUserData();
+  const [route, setRoute] = React.useState<AppRoute>(AppRoute.DASHBOARD);
+  const [initialChatPrompt, setInitialChatPrompt] = React.useState<string | null>(null);
+  const [selectedReport, setSelectedReport] = React.useState<DestinyReport | null>(null);
+  const [previousRoute, setPreviousRoute] = React.useState<AppRoute>(AppRoute.DASHBOARD);
 
   if (isInitializing) {
     return null; // Let the index.html loading screen handle it
@@ -130,6 +103,15 @@ function App() {
         {renderAllPages()}
       </Layout>
     </ErrorBoundary>
+  );
+}
+
+// 外层组件：包裹 Provider
+function App() {
+  return (
+    <UserDataProvider>
+      <AppContent />
+    </UserDataProvider>
   );
 }
 

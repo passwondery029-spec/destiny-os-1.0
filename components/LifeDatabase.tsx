@@ -1,8 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { getMemories, deleteMemory, addMemory } from '../services/memoryService';
-import { getReports, deleteReport } from '../services/reportService';
-import { getProfiles, getProfilesSync, updateProfile, addProfile } from '../services/profileService';
+import { useUserData } from '../contexts/UserDataContext';
 import { v4 as uuidv4 } from 'uuid';
 import { Memory, DestinyReport, UserProfile } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,11 +19,19 @@ interface LifeDatabaseProps {
 const MotionDiv = motion.div as any;
 
 const LifeDatabase: React.FC<LifeDatabaseProps> = ({ onViewReport }) => {
+    // 从 Context 获取数据
+    const { 
+        memories, 
+        reports, 
+        profiles,
+        deleteMemory,
+        addMemory,
+        deleteReport,
+        updateProfile,
+        addProfile
+    } = useUserData();
+    
     const [activeTab, setActiveTab] = useState<'MEMORIES' | 'REPORTS'>('MEMORIES');
-    const [memories, setMemories] = useState<Memory[]>([]);
-    const [reports, setReports] = useState<DestinyReport[]>([]);
-    // Initialize with getProfiles to prevent undefined errors on first render
-    const [profiles, setProfiles] = useState<UserProfile[]>(() => getProfilesSync());
 
     // Profile State
     const [selectedProfileId, setSelectedProfileId] = useState<string>('self');
@@ -43,18 +49,6 @@ const LifeDatabase: React.FC<LifeDatabaseProps> = ({ onViewReport }) => {
     const [newMemoryContent, setNewMemoryContent] = useState('');
     const [newMemoryCategory, setNewMemoryCategory] = useState<Memory['category']>('FACT');
 
-    useEffect(() => {
-        const loadData = async () => {
-            const loadedMemories = await getMemories();
-            setMemories(loadedMemories);
-            const loadedReports = await getReports();
-            setReports(loadedReports);
-            const loadedProfiles = await getProfiles();
-            setProfiles(loadedProfiles);
-        };
-        loadData();
-    }, []);
-
     // Derived Data
     const displayProfile = profiles.find(p => p.id === selectedProfileId) || profiles[0];
 
@@ -70,16 +64,12 @@ const LifeDatabase: React.FC<LifeDatabaseProps> = ({ onViewReport }) => {
 
     const handleDeleteMemory = async (id: string) => {
         await deleteMemory(id);
-        const updatedMemories = await getMemories();
-        setMemories(updatedMemories);
     };
 
     const handleAddMemory = async () => {
         if (!newMemoryContent.trim()) return;
 
         await addMemory(newMemoryContent, newMemoryCategory, displayProfile.id);
-        const updatedMemories = await getMemories();
-        setMemories(updatedMemories);
 
         // Reset and close
         setNewMemoryContent('');
@@ -91,8 +81,6 @@ const LifeDatabase: React.FC<LifeDatabaseProps> = ({ onViewReport }) => {
         e.stopPropagation();
         if (confirm('确定要销毁这份珍贵的命理报告吗？')) {
             await deleteReport(id);
-            const updatedReports = await getReports();
-            setReports(updatedReports);
         }
     }
 
@@ -127,8 +115,7 @@ const LifeDatabase: React.FC<LifeDatabaseProps> = ({ onViewReport }) => {
 
     const handleSaveProfile = async () => {
         if (modalMode === 'EDIT' && displayProfile && editForm) {
-            const updatedProfiles = await updateProfile(displayProfile.id, editForm);
-            setProfiles(updatedProfiles);
+            await updateProfile(displayProfile.id, editForm);
         } else if (modalMode === 'ADD' && editForm.name && editForm.birthDate) {
             const newProfile: UserProfile = {
                 id: uuidv4(),
@@ -141,8 +128,7 @@ const LifeDatabase: React.FC<LifeDatabaseProps> = ({ onViewReport }) => {
                 phone: editForm.phone,
                 email: editForm.email,
             };
-            const updatedProfiles = await addProfile(newProfile);
-            setProfiles(updatedProfiles);
+            await addProfile(newProfile);
             setSelectedProfileId(newProfile.id); // Switch to the newly created profile
         }
         setIsEditModalOpen(false);
