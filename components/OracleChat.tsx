@@ -56,7 +56,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     // Custom Report Payment State
     const [showPayModal, setShowPayModal] = useState(false);
     const [customReportTopic, setCustomReportTopic] = useState('');
-    const [paymentProcessing, setPaymentProcessing] = useState(false);
+
 
     // 天机币状态
     const [balance, setBalance] = useState(0);
@@ -764,26 +764,26 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
                             <div className="flex items-center justify-between border-t border-stone-100 pt-4">
                                 <div className="flex flex-col">
-                                    <span className="text-xs text-stone-400 line-through">原价 ¥99.00</span>
+                                    <span className="text-sm text-stone-500">深度定制报告</span>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-2xl font-bold text-[#8B0000]">¥9.90</span>
-                                        <span className="text-xs text-stone-500">限时特惠</span>
+                                        <span className="text-2xl font-bold text-[#B8860B]">20</span>
+                                        <span className="text-xs text-stone-500">天机币</span>
                                     </div>
                                 </div>
                                 <button
                                     onClick={handleCustomReportPay}
-                                    disabled={!customReportTopic.trim() || paymentProcessing}
-                                    className={`px-6 py-3 rounded-xl font-bold text-white shadow-lg transition-all flex items-center gap-2 ${!customReportTopic.trim() || paymentProcessing
+                                    disabled={!customReportTopic.trim() || isGeneratingReport}
+                                    className={`px-6 py-3 rounded-xl font-bold text-white shadow-lg transition-all flex items-center gap-2 ${!customReportTopic.trim() || isGeneratingReport
                                         ? 'bg-stone-300 cursor-not-allowed'
                                         : 'bg-[#B8860B] hover:bg-[#9A7009] active:scale-95'
                                         }`}
                                 >
-                                    {paymentProcessing ? (
+                                    {isGeneratingReport ? (
                                         <>
                                             <SparklesIcon className="w-4 h-4 animate-spin" />
-                                            支付中...
+                                            生成中...
                                         </>
-                                    ) : '立即支付并生成'}
+                                    ) : '消耗20币生成'}
                                 </button>
                             </div>
                         </motion.div>
