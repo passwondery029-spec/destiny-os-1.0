@@ -5,7 +5,7 @@ import {
     AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid
 } from 'recharts';
 import { THEME_COLORS } from '../constants';
-import { addExp, getLevelState, canGenerateFreeReport, incrementReportCount, getCurrentLevelConfig, canGenerateTodayReport, markTodayReportGenerated } from '../services/levelService';
+import { getLevelState, canGenerateFreeReport, incrementReportCount, getCurrentLevelConfig, canGenerateTodayReport, markTodayReportGenerated } from '../services/levelService';
 import { generateDailyFortune, DailyFortune } from '../services/fortuneService';
 import { getProfiles } from '../services/profileService';
 import { supabase } from '../services/supabaseClient';
@@ -55,10 +55,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
     const [todayReportGenerated, setTodayReportGenerated] = useState(false); // 今日是否已生成报告
 
     // Wooden Fish State
-    const [meritCount, setMeritCount] = useState(0);
-    const [fishClickCount, setFishClickCount] = useState(0); // 记录木鱼点击次数，用于天机币计算
+    const [fishClickCount, setFishClickCount] = useState(0); // 今日敲木鱼次数
     const [ripples, setRipples] = useState<{ id: number, x: number, y: number }[]>([]);
-    const [xpGainedToday, setXpGainedToday] = useState(0);
 
     // Daily Notification State
     const [showDailyNotif, setShowDailyNotif] = useState(false);
@@ -98,9 +96,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
             setTimeout(() => setShowDailyNotif(true), 800);
         }
 
-        // Load initial merit/XP
-        const state = getLevelState();
-        setMeritCount(state.currentExp);
+        // Load today's fish click count (reset daily)
+        const fishClickKey = 'destiny_os_fish_click';
+        const fishClickData = localStorage.getItem(fishClickKey);
+        if (fishClickData) {
+            const { date, count } = JSON.parse(fishClickData);
+            if (date === today) {
+                setFishClickCount(count);
+            } else {
+                // New day, reset count
+                localStorage.setItem(fishClickKey, JSON.stringify({ date: today, count: 0 }));
+                setFishClickCount(0);
+            }
+        } else {
+            localStorage.setItem(fishClickKey, JSON.stringify({ date: today, count: 0 }));
+        }
 
         // Load balance & free quota
         getBalance().then(b => setBalance(b));
@@ -131,17 +141,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
         const newClickCount = fishClickCount + 1;
         setFishClickCount(newClickCount);
         
+        // 保存今日点击次数到 localStorage
+        const today = new Date().toISOString().split('T')[0];
+        localStorage.setItem('destiny_os_fish_click', JSON.stringify({ date: today, count: newClickCount }));
+        
         // 每10次获得1枚天机币
         if (newClickCount % 10 === 0) {
             addBalance(1, '木鱼诵经');
             setBalance(b => b + 1);
-        }
-        
-        // 同时也增加灵力值（保留原有的灵力系统）
-        if (xpGainedToday < 50) {
-            addExp(1);
-            setXpGainedToday(p => p + 1);
-            setMeritCount(c => c + 1);
         }
     };
 
@@ -425,8 +432,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
                         <span className="text-2xl font-serif text-[#B8860B] font-bold tabular-nums">{balance}</span>
                     </div>
                     <div className="text-right">
-                        <span className="text-[10px] text-stone-400 block uppercase tracking-wider">灵力</span>
-                        <span className="text-sm font-serif text-stone-500 tabular-nums">{meritCount}</span>
+                        <span className="text-[10px] text-stone-400 block uppercase tracking-wider">今日诵经</span>
+                        <span className="text-sm font-serif text-stone-500 tabular-nums">{fishClickCount} 次</span>
                     </div>
                 </div>
             </MotionDiv>
