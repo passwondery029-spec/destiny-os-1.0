@@ -13,7 +13,8 @@ import { getLevelState, getCurrentLevelConfig } from '../services/levelService';
 import { LEVEL_CONFIGS } from '../constants';
 import { supabase } from '../services/supabaseClient';
 import { Session } from '@supabase/supabase-js';
-import { getBalance, getTransactions, Transaction } from '../services/walletService';
+import { getBalance, getTransactions, Transaction, addBalance, RECHARGE_OPTIONS } from '../services/walletService';
+import { WalletIcon } from '@heroicons/react/24/outline';
 
 const MotionDiv = motion.div as any;
 
@@ -28,7 +29,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
     const [balance, setBalance] = useState(0);
     const [isLoadingBalance, setIsLoadingBalance] = useState(true);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [activeModal, setActiveModal] = useState<'NONE' | 'USER_AGREEMENT' | 'PRIVACY' | 'FEEDBACK' | 'ACCOUNT_SECURITY' | 'REAL_NAME_AUTH' | 'TRANSACTIONS' | 'LEVEL_PRIVILEGES'>('NONE');
+    const [activeModal, setActiveModal] = useState<'NONE' | 'USER_AGREEMENT' | 'PRIVACY' | 'FEEDBACK' | 'ACCOUNT_SECURITY' | 'REAL_NAME_AUTH' | 'TRANSACTIONS' | 'LEVEL_PRIVILEGES' | 'RECHARGE'>('NONE');
     const [notifEnabled, setNotifEnabled] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
 
@@ -279,7 +280,48 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                 <BoltIcon className="absolute -bottom-4 -right-4 w-32 h-32 text-white/5 rotate-12" />
             </div>
 
-            {/* 3. SETTINGS & WALLET GROUP */}
+            {/* 3. WALLET CARD - 天机币 */}
+            <MotionDiv
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-xl border border-stone-200 p-5 shadow-sm relative overflow-hidden"
+            >
+                <div className="absolute right-0 top-0 opacity-5 font-calligraphy text-7xl pointer-events-none -translate-y-2 translate-x-2">
+                    币
+                </div>
+
+                <div className="flex justify-between items-start relative z-10">
+                    <div>
+                        <div className="text-[#1F1F1F] font-serif font-bold text-lg flex items-center gap-2">
+                            <WalletIcon className="w-5 h-5 text-[#B8860B]" />
+                            天机币
+                        </div>
+                        <p className="text-stone-400 text-xs mt-1">用于咨询、生成深度报告</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-3xl font-bold text-[#B8860B] tabular-nums">{Math.floor(balance)}</p>
+                        <p className="text-stone-400 text-[10px] mb-2">当前余额</p>
+                        <button
+                            onClick={() => setActiveModal('RECHARGE')}
+                            className="bg-[#B8860B] text-white text-[10px] px-3 py-1.5 rounded-full hover:bg-[#9a700a] transition-colors flex items-center gap-1"
+                        >
+                            充值 <ChevronRightIcon className="w-3 h-3" />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-stone-100 flex justify-between">
+                    <button
+                        onClick={() => setActiveModal('TRANSACTIONS')}
+                        className="text-stone-500 text-[10px] hover:text-[#B8860B] transition-colors flex items-center gap-1"
+                    >
+                        <ArrowTrendingUpIcon className="w-3 h-3" />
+                        查看明细
+                    </button>
+                </div>
+            </MotionDiv>
+
+            {/* 4. SETTINGS & WALLET GROUP */}
             <div className="bg-white rounded-xl border border-stone-200 overflow-hidden shadow-sm">
                 {/* Notification Toggle */}
                 <div className="flex items-center justify-between p-4 border-b border-stone-100">
@@ -302,7 +344,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
 
             </div>
 
-            {/* 4. MENU LIST */}
+            {/* 5. MENU LIST */}
             <div className="bg-white rounded-xl border border-stone-200 overflow-hidden shadow-sm">
                 {menuItems.map((item, idx) => (
                     <button
@@ -319,7 +361,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                 ))}
             </div>
 
-            {/* 5. DELETE ACCOUNT (PIPL Compliance) */}
+            {/* 6. DELETE ACCOUNT (PIPL Compliance) */}
             {session && (
                 <button
                     onClick={handleDeleteAccount}
@@ -357,6 +399,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                                 {activeModal === 'ACCOUNT_SECURITY' && '账号与安全'}
                                 {activeModal === 'REAL_NAME_AUTH' && '实名认证'}
                                 {activeModal === 'LEVEL_PRIVILEGES' && '境界特权'}
+                                {activeModal === 'RECHARGE' && '天机币充值'}
                             </h3>
 
                             <div className="text-sm text-stone-600 leading-relaxed space-y-2 mb-6">
@@ -408,6 +451,45 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                                         ) : (
                                             <p className="text-center text-[#B8860B] font-bold py-4">您已达到最高境界</p>
                                         )}
+                                    </div>
+                                )}
+                                {activeModal === 'RECHARGE' && (
+                                    <div className="space-y-4">
+                                        <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl mb-4">
+                                            <p className="text-xs text-stone-500 mb-2"><strong>当前余额：</strong></p>
+                                            <p className="text-2xl font-bold text-[#B8860B]">{Math.floor(balance)} 天机币</p>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {RECHARGE_OPTIONS.map((option, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    onClick={async () => {
+                                                        const totalCoins = option.coins + option.bonus;
+                                                        const newBalance = await addBalance(totalCoins, `${option.label}充值`);
+                                                        setBalance(newBalance);
+                                                        alert(`充值成功！获得 ${totalCoins} 天机币！`);
+                                                        setActiveModal('NONE');
+                                                    }}
+                                                    className={`p-4 rounded-xl border-2 transition-all hover:scale-105 ${
+                                                        idx === 2 ? 'border-[#B8860B] bg-[#B8860B]/5' : 'border-stone-200 hover:border-stone-300'
+                                                    }`}
+                                                >
+                                                    <div className="text-center">
+                                                        <p className={`text-lg font-bold ${idx === 2 ? 'text-[#B8860B]' : 'text-stone-700'}`}>
+                                                            {option.coins} 币
+                                                        </p>
+                                                        {option.bonus > 0 && (
+                                                            <p className="text-xs text-emerald-600 font-bold">+{option.bonus} 赠币</p>
+                                                        )}
+                                                        <p className={`text-sm mt-2 ${idx === 2 ? 'text-[#B8860B] font-bold' : 'text-stone-500'}`}>
+                                                            ¥{option.price}
+                                                        </p>
+                                                        <p className="text-[10px] text-stone-400 mt-1">{option.label}</p>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
                                 {activeModal === 'ACCOUNT_SECURITY' && (
@@ -534,6 +616,10 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                                     if (activeModal === 'FEEDBACK') { alert('感谢您的反馈！我们会尽快处理。'); setActiveModal('NONE'); }
                                     else if (activeModal === 'ACCOUNT_SECURITY') handleUpdateSecurity();
                                     else if (activeModal === 'REAL_NAME_AUTH') handleRealNameAuthSubmit();
+                                    else if (activeModal === 'RECHARGE') {
+                                        // 充值弹窗的按钮逻辑已经在卡片点击时处理了
+                                        setActiveModal('NONE');
+                                    }
                                     else setActiveModal('NONE');
                                 }}
                                 disabled={isUpdating}
@@ -542,7 +628,8 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                                 {isUpdating ? '处理中...' :
                                     activeModal === 'FEEDBACK' ? '提交反馈' :
                                         activeModal === 'ACCOUNT_SECURITY' ? '保存修改' :
-                                            activeModal === 'REAL_NAME_AUTH' ? '提交认证' : '我已阅读并同意'}
+                                            activeModal === 'REAL_NAME_AUTH' ? '提交认证' :
+                                                activeModal === 'RECHARGE' ? '关闭' : '我已阅读并同意'}
                             </button>
                         </MotionDiv>
                     </div>
