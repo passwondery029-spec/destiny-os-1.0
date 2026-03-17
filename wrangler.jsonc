@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "destiny-os-api",
+  "main": "worker.js",
+  "compatibility_date": "2026-03-17",
+  "compatibility_flags": ["nodejs_compat_v2"],
+
+  "vars": {
+    "ENVIRONMENT": "production"
+  },
+
+  "routes": [
+    {
+      "pattern": "api.destiny-os.workers.dev/*",
+      "custom_domain": false
+    }
+  ],
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
