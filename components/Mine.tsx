@@ -446,8 +446,9 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                                                     key={idx}
                                                     onClick={async () => {
                                                         const totalCoins = option.coins + option.bonus;
+                                                        const expAmount = totalCoins * 10;
                                                         await addBalance(totalCoins, `${option.label}充值`, 'RECHARGE');
-                                                        alert(`充值成功！获得 ${totalCoins} 天机币！`);
+                                                        alert(`充值成功！\n\n获得 ${totalCoins} 天机币\n同时获得 ${expAmount} 灵力！`);
                                                         setActiveModal('NONE');
                                                     }}
                                                     className={`p-4 rounded-xl border-2 transition-all hover:scale-105 ${

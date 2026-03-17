@@ -186,14 +186,29 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
     
     // ============== 数据修改函数 ==============
     
+    const handleAddExp = useCallback(async (amount: number) => {
+        const state = await levelAddExp(amount);
+        setLevelState(state);
+        const config = LEVEL_CONFIGS.find(l => l.level === state.level) || LEVEL_CONFIGS[0];
+        setLevelConfig(config);
+        return state;
+    }, []);
+    
     const handleAddBalance = useCallback(async (coins: number, desc: string, type?: Transaction['type']) => {
         const newBalance = await walletAddBalance(coins, desc, type);
         setBalance(newBalance);
+        
+        // 充值时同时给予灵力：1 天机币 = 10 灵力
+        if (type === 'RECHARGE') {
+            const expAmount = coins * 10;
+            await handleAddExp(expAmount);
+        }
+        
         // 刷新交易记录
         const txs = await getTransactions();
         setTransactions(txs);
         return newBalance;
-    }, []);
+    }, [handleAddExp]);
     
     const handleDeductBalance = useCallback(async (amount: number, desc: string) => {
         const result = await walletDeductBalance(amount, desc);
@@ -216,14 +231,6 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         const updated = await profileAddProfile(profile);
         setProfiles(updated);
         return updated;
-    }, []);
-    
-    const handleAddExp = useCallback(async (amount: number) => {
-        const state = await levelAddExp(amount);
-        setLevelState(state);
-        const config = LEVEL_CONFIGS.find(l => l.level === state.level) || LEVEL_CONFIGS[0];
-        setLevelConfig(config);
-        return state;
     }, []);
     
     const handleAddMemory = useCallback(async (content: string, category: Memory['category'], profileId?: string) => {
