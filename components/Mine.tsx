@@ -40,7 +40,8 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
     const session = contextSession || propSession;
     
     const [isVerified, setIsVerified] = useState(!!session?.user?.user_metadata?.is_verified);
-    const [activeModal, setActiveModal] = useState<'NONE' | 'USER_AGREEMENT' | 'PRIVACY' | 'FEEDBACK' | 'ACCOUNT_SECURITY' | 'REAL_NAME_AUTH' | 'TRANSACTIONS' | 'LEVEL_PRIVILEGES' | 'RECHARGE'>('NONE');
+    const [activeModal, setActiveModal] = useState<'NONE' | 'USER_AGREEMENT' | 'PRIVACY' | 'FEEDBACK' | 'ACCOUNT_SECURITY' | 'REAL_NAME_AUTH' | 'TRANSACTIONS' | 'LEVEL_PRIVILEGES' | 'RECHARGE' | 'RECHARGE_SUCCESS'>('NONE');
+    const [rechargeResult, setRechargeResult] = useState<{coins: number; exp: number} | null>(null);
     const [notifEnabled, setNotifEnabled] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
 
@@ -448,8 +449,8 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                                                         const totalCoins = option.coins + option.bonus;
                                                         const expAmount = totalCoins * 10;
                                                         await addBalance(totalCoins, `${option.label}充值`, 'RECHARGE');
-                                                        alert(`充值成功！\n\n获得 ${totalCoins} 天机币\n同时获得 ${expAmount} 灵力！`);
-                                                        setActiveModal('NONE');
+                                                        setRechargeResult({ coins: totalCoins, exp: expAmount });
+                                                        setActiveModal('RECHARGE_SUCCESS');
                                                     }}
                                                     className={`p-4 rounded-xl border-2 transition-all hover:scale-105 ${
                                                         idx === 2 ? 'border-[#B8860B] bg-[#B8860B]/5' : 'border-stone-200 hover:border-stone-300'
@@ -470,6 +471,35 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                                                 </button>
                                             ))}
                                         </div>
+                                    </div>
+                                )}
+
+                                {/* 充值成功弹窗 */}
+                                {activeModal === 'RECHARGE_SUCCESS' && rechargeResult && (
+                                    <div className="text-center py-6">
+                                        <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-[#B8860B] to-yellow-500 rounded-full flex items-center justify-center shadow-lg">
+                                            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="text-2xl font-bold text-[#1F1F1F] mb-2">充值成功！</h3>
+                                        <div className="space-y-2 mb-6">
+                                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-lg border border-amber-200">
+                                                <span className="text-3xl font-bold text-[#B8860B]">+{rechargeResult.coins}</span>
+                                                <span className="text-stone-500">天机币</span>
+                                            </div>
+                                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg border border-emerald-200">
+                                                <span className="text-xl font-bold text-emerald-600">+{rechargeResult.exp}</span>
+                                                <span className="text-stone-500">灵力</span>
+                                            </div>
+                                        </div>
+                                        <p className="text-sm text-stone-400 mb-6">财富能量已注入您的账户</p>
+                                        <button
+                                            onClick={() => { setActiveModal('NONE'); setRechargeResult(null); }}
+                                            className="w-full py-3 bg-[#B8860B] text-white rounded-xl font-bold hover:bg-[#9a700a] transition-colors"
+                                        >
+                                            收到啦
+                                        </button>
                                     </div>
                                 )}
                                 {activeModal === 'ACCOUNT_SECURITY' && (
@@ -599,6 +629,10 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                                     else if (activeModal === 'RECHARGE') {
                                         // 充值弹窗的按钮逻辑已经在卡片点击时处理了
                                         setActiveModal('NONE');
+                                    }
+                                    else if (activeModal === 'RECHARGE_SUCCESS') {
+                                        setActiveModal('NONE');
+                                        setRechargeResult(null);
                                     }
                                     else setActiveModal('NONE');
                                 }}

@@ -101,6 +101,9 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
     const [reports, setReports] = useState<DestinyReport[]>([]);
     const [isLoadingReports, setIsLoadingReports] = useState(true);
     
+    // 追踪是否已完成首次数据加载
+    const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+    
     // ============== 计算属性 ==============
     const activeProfile = profiles.find(p => p.id === activeProfileId) || profiles.find(p => p.relation === 'SELF') || profiles[0] || null;
     
@@ -312,11 +315,14 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
     
     // ============== 登录后加载数据 ==============
     useEffect(() => {
-        if (session && !isInitializing) {
-            // 用户已登录，加载所有数据
-            refreshAll();
+        // 只有当 session 有效且未初始化时加载数据
+        if (session && !isInitializing && !initialDataLoaded) {
+            console.log('[UserDataContext] Initial data load...');
+            refreshAll().then(() => {
+                setInitialDataLoaded(true);
+            });
         }
-    }, [session, isInitializing, refreshAll]);
+    }, [session?.user?.id, isInitializing, initialDataLoaded, refreshAll]);
     
     // ============== Context Value ==============
     const value: UserDataContextValue = {

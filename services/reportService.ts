@@ -1,4 +1,3 @@
-
 import { DestinyReport } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { MOCK_REPORTS } from './mockDataService';
@@ -19,44 +18,67 @@ const getLocalReports = (): DestinyReport[] => {
 // 辅助函数：获取当前用户ID
 const getCurrentUserId = async (): Promise<string | null> => {
   const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+        return user.id;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.id) {
+        return session.user.id;
+    }
+    const stored = localStorage.getItem('sb-kvqqrlmapsfmskhhyyvm-auth-token');
+    if (stored) {
+        try {
+            const tokenData = JSON.parse(stored);
+            if (tokenData?.access_token) {
+                const payload = JSON.parse(atob(tokenData.access_token.split('.')[1]));
+                if (payload?.sub) {
+                    return payload.sub;
+                }
+            }
+        } catch (e) {}
+    }
+    return null;
   return user?.id || null;
 };
 
 export const getReports = async (profileId?: string): Promise<DestinyReport[]> => {
   try {
-    let query = supabase
-      .from('reports')
-      .select('*')
-      .order('date', { ascending: false });
+    const userId = await getCurrentUserId();
+    if (!userId) return getLocalReports();
 
-    // 如果指定了 profileId，按其筛选
+    let url = '/api/reports';
     if (profileId) {
-      query = query.eq('profile_id', profileId);
+        url += `?profileId=${profileId}`;
     }
 
-    const { data, error } = await query;
+    const response = await fetch(url, {
+        headers: { 'x-user-id': userId }
+    });
 
-    if (error) throw error;
+    if (!response.ok) {
+        throw new Error('Failed to fetch reports');
+    }
 
-    // Convert snake_case from DB to camelCase for frontend
+    const data = await response.json();
+    
     if (data && data.length > 0) {
-      return data.map(r => ({
+      return data.map((r: any) => ({
         id: r.id,
-        profileId: r.profile_id || 'self',
+        profileId: r.profile_id || r.profileId || 'self',
         title: r.title,
         type: r.type,
         summary: r.summary || '',
         content: r.content || '',
-        htmlContent: r.html_content,
+        htmlContent: r.html_content || r.htmlContent,
         date: r.date,
         tags: r.tags || [],
         cost: r.cost
       }));
     }
 
-    return getLocalReports(); // Fallback if DB is empty
+    return getLocalReports();
   } catch (error) {
-    console.error('Error fetching reports from Supabase:', error);
+    console.error('[ReportService] getReports error:', error);
     return getLocalReports();
   }
 };
@@ -85,54 +107,55 @@ export const addReport = async (
   };
 
   try {
-    // 获取当前用户ID
     const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Not logged in');
 
-    // Insert into Supabase with correct column names
-    const { error } = await supabase
-      .from('reports')
-      .insert([
-        {
-          id: newReport.id,
-          user_id: userId,
-          profile_id: newReport.profileId,
-          title: newReport.title,
-          type: newReport.type,
-          summary: newReport.summary,
-          content: newReport.content,
-          html_content: newReport.htmlContent,
-          cost: newReport.cost,
-          date: newReport.date,
-          tags: newReport.tags
-        }
-      ]);
+    const response = await fetch('/api/reports', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': userId
+        },
+        body: JSON.stringify(newReport)
+    });
 
-    if (error) throw error;
+    if (!response.ok) {
+        throw new Error('Failed to add report');
+    }
+
+    const data = await response.json();
+    return {
+        ...newReport,
+        id: data.id
+    };
   } catch (error) {
-    console.error('Error adding report to Supabase:', error);
+    console.error('[ReportService] addReport error:', error);
     // Fallback to local storage
     const reports = getLocalReports();
     const updated = [newReport, ...reports];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    return newReport;
   }
-
-  return newReport;
 };
 
 export const deleteReport = async (id: string): Promise<void> => {
   try {
-    const { error } = await supabase
-      .from('reports')
-      .delete()
-      .eq('id', id);
+    const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Not logged in');
 
-    if (error) throw error;
+    const response = await fetch(`/api/reports/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': userId }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to delete report');
+    }
   } catch (error) {
-    console.error('Error deleting report from Supabase:', error);
+    console.error('[ReportService] deleteReport error:', error);
     // Fallback to local storage
     const reports = getLocalReports();
     const updated = reports.filter(r => r.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   }
 };
-

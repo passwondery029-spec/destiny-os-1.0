@@ -1,4 +1,3 @@
-
 import { Memory } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from './supabaseClient';
@@ -34,6 +33,32 @@ const INITIAL_MEMORIES: Memory[] = [
 // Fallback to local storage if Supabase fails or is not configured
 const STORAGE_KEY = 'destiny_os_memories';
 
+// Get user ID
+const getUserId = async (): Promise<string | null> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+        return user.id;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.id) {
+        return session.user.id;
+    }
+    const stored = localStorage.getItem('sb-kvqqrlmapsfmskhhyyvm-auth-token');
+    if (stored) {
+        try {
+            const tokenData = JSON.parse(stored);
+            if (tokenData?.access_token) {
+                const payload = JSON.parse(atob(tokenData.access_token.split('.')[1]));
+                if (payload?.sub) {
+                    return payload.sub;
+                }
+            }
+        } catch (e) {}
+    }
+    return null;
+    return user?.id || null;
+};
+
 const getLocalMemories = (): Memory[] => {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
@@ -45,28 +70,34 @@ const getLocalMemories = (): Memory[] => {
 
 export const getMemories = async (): Promise<Memory[]> => {
   try {
-    const { data, error } = await supabase
-      .from('memories')
-      .select('*')
-      .order('timestamp', { ascending: false });
+    const userId = await getUserId();
+    if (!userId) return getLocalMemories();
 
-    if (error) throw error;
+    const response = await fetch('/api/memories', {
+        headers: { 'x-user-id': userId }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch memories');
+    }
+
+    const data = await response.json();
     
-    // Convert snake_case from DB to camelCase for frontend
+    // 转换为前端需要的格式
     if (data && data.length > 0) {
-      return data.map(m => ({
+      return data.map((m: any) => ({
         id: m.id,
-        profileId: m.profile_id,
+        profileId: m.profile_id || m.profileId,
         content: m.content,
         category: m.category,
-        timestamp: Number(m.timestamp),
-        confidence: m.confidence
+        timestamp: new Date(m.created_at || m.timestamp).getTime(),
+        confidence: m.confidence || 0.9
       }));
     }
     
-    return getLocalMemories(); // Fallback if DB is empty
+    return getLocalMemories();
   } catch (error) {
-    console.error('Error fetching memories from Supabase:', error);
+    console.error('[MemoryService] getMemories error:', error);
     return getLocalMemories();
   }
 };
@@ -82,42 +113,60 @@ export const addMemory = async (content: string, category: Memory['category'], p
   };
 
   try {
-    // Insert into Supabase
-    const { error } = await supabase
-      .from('memories')
-      .insert([
-        {
-          id: newMemory.id,
-          profile_id: newMemory.profileId,
-          content: newMemory.content,
-          category: newMemory.category,
-          timestamp: newMemory.timestamp,
-          confidence: newMemory.confidence
-        }
-      ]);
+    const userId = await getUserId();
+    if (!userId) throw new Error('Not logged in');
 
-    if (error) throw error;
+    const response = await fetch('/api/memories', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': userId
+        },
+        body: JSON.stringify({
+            content,
+            category,
+            profileId
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to add memory');
+    }
+
+    const data = await response.json();
+    return {
+        id: data.id,
+        profileId: data.profile_id || profileId,
+        content: data.content,
+        category: data.category,
+        timestamp: new Date(data.createdAt).getTime(),
+        confidence: 0.9
+    };
   } catch (error) {
-    console.error('Error adding memory to Supabase:', error);
+    console.error('[MemoryService] addMemory error:', error);
     // Fallback to local storage
     const memories = getLocalMemories();
     const updated = [newMemory, ...memories];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    return newMemory;
   }
-
-  return newMemory;
 };
 
 export const deleteMemory = async (id: string): Promise<void> => {
   try {
-    const { error } = await supabase
-      .from('memories')
-      .delete()
-      .eq('id', id);
+    const userId = await getUserId();
+    if (!userId) throw new Error('Not logged in');
 
-    if (error) throw error;
+    const response = await fetch(`/api/memories/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': userId }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to delete memory');
+    }
   } catch (error) {
-    console.error('Error deleting memory from Supabase:', error);
+    console.error('[MemoryService] deleteMemory error:', error);
     // Fallback to local storage
     const memories = getLocalMemories();
     const updated = memories.filter(m => m.id !== id);

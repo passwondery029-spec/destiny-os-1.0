@@ -682,6 +682,530 @@ app.post('/api/admin/run-memory-extraction', async (req, res) => {
 });
 
 
+
+// ============== 等级 API ==============
+app.get('/api/level', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId || typeof userId !== 'string') {
+      return res.status(401).json({ error: '未登录' });
+    }
+    if (!supabaseAdmin) {
+      return res.status(500).json({ error: 'Supabase Admin Client not initialized' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('user_levels')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) {
+      // 初始化新用户
+      const today = new Date().toISOString().split('T')[0];
+      const initialState = {
+        user_id: userId,
+        level: 1,
+        current_exp: 20,
+        total_exp: 20,
+        last_login_date: today,
+        today_report_count: 0
+      };
+      
+      const { data: newData, error: insertError } = await supabaseAdmin
+        .from('user_levels')
+        .upsert(initialState, { onConflict: 'user_id' })
+        .select()
+        .single();
+        
+      if (insertError) {
+        console.error('[API] init level error:', insertError);
+        return res.status(500).json({ error: '初始化失败' });
+      }
+      
+      return res.json({
+        level: newData.level,
+        exp: newData.current_exp,
+        totalExp: newData.total_exp,
+        lastLoginDate: newData.last_login_date,
+        lastDailyReportDate: ''
+      });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    let state = {
+      level: data.level,
+      exp: data.current_exp,
+      totalExp: data.total_exp,
+      lastLoginDate: data.last_login_date,
+      lastDailyReportDate: data.today_report_count || 0
+    };
+
+    if (data.last_login_date !== today) {
+      // 登录奖励
+      state.lastLoginDate = today;
+      state.exp = (data.current_exp || 0) + 20;
+      state.totalExp = (data.total_exp || 0) + 20;
+
+      await supabaseAdmin
+        .from('user_levels')
+        .update({
+          last_login_date: today,
+          current_exp: state.exp,
+          total_exp: state.totalExp,
+          today_report_count: 0
+        })
+        .eq('user_id', userId);
+    }
+    res.json(state);
+  } catch (e) {
+    console.error('[API] get level error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/level/add-exp', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const { amount } = req.body;
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const { data, error } = await supabaseAdmin
+      .from('user_levels')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) return res.status(404).json({ error: '用户不存在' });
+
+    const newExp = (data.current_exp || 0) + amount;
+    const newTotalExp = (data.total_exp || 0) + amount;
+
+    await supabaseAdmin
+      .from('user_levels')
+      .update({ current_exp: newExp, total_exp: newTotalExp })
+      .eq('user_id', userId);
+
+    res.json({ success: true, exp: newExp, totalExp: newTotalExp });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/level/mark-report', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const { data, error } = await supabaseAdmin
+      .from('user_levels')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) return res.status(404).json({ error: '用户不存在' });
+
+    const newExp = (data.current_exp || 0) + 50;
+    const newTotalExp = (data.total_exp || 0) + 50;
+
+    await supabaseAdmin
+      .from('user_levels')
+      .update({
+        current_exp: newExp,
+        total_exp: newTotalExp,
+        today_report_count: (data.today_report_count || 0) + 1
+      })
+      .eq('user_id', userId);
+
+    res.json({ success: true, exp: newExp, totalExp: newTotalExp });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+
+// ============== 天机币 API ==============
+app.get('/api/wallet/balance', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (userError || !user) return res.status(404).json({ error: '用户不存在' });
+
+    const balance = user.user_metadata?.balance || 0;
+    res.json({ balance: Number(balance) });
+  } catch (e) {
+    console.error('[API] get balance error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/wallet/transactions', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const { data, error } = await supabaseAdmin
+      .from('balance_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+    res.json(data.map(t => ({
+      id: t.id,
+      type: t.type,
+      amount: t.amount,
+      desc: t.description,
+      ts: new Date(t.created_at).getTime(),
+      balanceBefore: t.balance_before,
+      balanceAfter: t.balance_after
+    })));
+  } catch (e) {
+    console.error('[API] get transactions error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/wallet/add', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const { amount, desc, type } = req.body;
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+    if (!amount || amount <= 0) return res.status(400).json({ error: '无效金额' });
+
+    const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+
+    const oldBalance = Number(user.user_metadata?.balance || 0);
+    const newBalance = oldBalance + amount;
+
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: { ...user.user_metadata, balance: newBalance }
+    });
+
+    await supabaseAdmin.from('balance_transactions').insert({
+      user_id: userId,
+      type: type || 'RECHARGE',
+      amount,
+      balance_before: oldBalance,
+      balance_after: newBalance,
+      description: desc || '充值'
+    });
+
+    res.json({ success: true, balance: newBalance });
+  } catch (e) {
+    console.error('[API] add balance error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/wallet/deduct', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const { amount, desc } = req.body;
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+    if (!amount || amount <= 0) return res.status(400).json({ error: '无效金额' });
+
+    const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+
+    const oldBalance = Number(user.user_metadata?.balance || 0);
+    if (oldBalance < amount) return res.status(400).json({ error: '余额不足' });
+
+    const newBalance = oldBalance - amount;
+
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: { ...user.user_metadata, balance: newBalance }
+    });
+
+    await supabaseAdmin.from('balance_transactions').insert({
+      user_id: userId,
+      type: 'DEDUCT',
+      amount: -amount,
+      balance_before: oldBalance,
+      balance_after: newBalance,
+      description: desc || '消费'
+    });
+
+    res.json({ success: true, balance: newBalance });
+  } catch (e) {
+    console.error('[API] deduct balance error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============== 用户档案 API (存储在 user_metadata 中) ==============
+app.get('/api/profiles', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (userError || !user) return res.status(404).json({ error: '用户不存在' });
+
+    const profiles = user.user_metadata?.destiny_profiles || [];
+    res.json(profiles);
+  } catch (e) {
+    console.error('[API] get profiles error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/profiles', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const profile = req.body;
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+
+    const existingProfiles = user.user_metadata?.destiny_profiles || [];
+    const newProfiles = [...existingProfiles, profile];
+
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: { ...user.user_metadata, destiny_profiles: newProfiles }
+    });
+
+    res.json(profile);
+  } catch (e) {
+    console.error('[API] add profile error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/profiles/:id', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const { id } = req.params;
+    const updates = req.body;
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+
+    const existingProfiles = user.user_metadata?.destiny_profiles || [];
+    const newProfiles = existingProfiles.map((p: any) => p.id === id ? { ...p, ...updates } : p);
+
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: { ...user.user_metadata, destiny_profiles: newProfiles }
+    });
+
+    res.json(newProfiles.find((p: any) => p.id === id));
+  } catch (e) {
+    console.error('[API] update profile error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============== 记忆碎片 API (使用数据库表) ==============
+app.get('/api/memories', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const { data, error } = await supabaseAdmin
+      .from('memories')
+      .select('*')
+      .eq('user_id', userId)
+      .order('timestamp', { ascending: false });
+
+    if (error) throw error;
+    res.json(data.map(m => ({
+      id: m.id,
+      content: m.content,
+      category: m.category,
+      profileId: m.profile_id,
+      timestamp: m.timestamp,
+      confidence: m.confidence
+    })));
+  } catch (e) {
+    console.error('[API] get memories error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/memories', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const { content, category, profileId } = req.body;
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const newMemory = {
+      user_id: userId,
+      profile_id: profileId || 'self',
+      content,
+      category,
+      timestamp: Date.now(),
+      confidence: 0.9
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from('memories')
+      .insert(newMemory)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({
+      id: data.id,
+      content: data.content,
+      category: data.category,
+      profileId: data.profile_id,
+      timestamp: data.timestamp,
+      confidence: data.confidence
+    });
+  } catch (e) {
+    console.error('[API] add memory error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/memories/:id', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const { id } = req.params;
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const { error } = await supabaseAdmin
+      .from('memories')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[API] delete memory error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============== 天命报告 API (使用数据库表) ==============
+app.get('/api/reports', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const profileId = req.query.profileId as string;
+
+    let query = supabaseAdmin
+      .from('reports')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: false });
+
+    if (profileId) {
+      query = query.eq('profile_id', profileId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    res.json(data.map(r => ({
+      id: r.id,
+      profileId: r.profile_id,
+      title: r.title,
+      type: r.type,
+      summary: r.summary,
+      content: r.content,
+      htmlContent: r.html_content,
+      date: r.date,
+      tags: r.tags,
+      cost: r.cost,
+      
+    })));
+  } catch (e) {
+    console.error('[API] get reports error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/reports', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const report = req.body;
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const newReport = {
+      user_id: userId,
+      profile_id: report.profileId || 'self',
+      title: report.title,
+      type: report.type,
+      summary: report.summary,
+      content: report.content || '',
+      html_content: report.htmlContent || '',
+      date: report.date || new Date().toISOString().split('T')[0],
+      tags: report.tags || [],
+      cost: report.cost || 0
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from('reports')
+      .insert(newReport)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({
+      id: data.id,
+      profileId: data.profile_id,
+      title: data.title,
+      type: data.type,
+      summary: data.summary,
+      content: data.content,
+      htmlContent: data.html_content,
+      date: data.date,
+      tags: data.tags,
+      cost: data.cost,
+      createdAt: data.created_at
+    });
+  } catch (e) {
+    console.error('[API] add report error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/reports/:id', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const { id } = req.params;
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const { error } = await supabaseAdmin
+      .from('reports')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[API] delete report error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
 // Vite middleware for development
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
@@ -700,3 +1224,57 @@ async function startServer() {
 }
 
 startServer();
+
+// ============== 聊天记录 API ==============
+app.get('/api/chat-logs', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    const profileId = req.query.profileId as string || 'self';
+
+    const { data, error } = await supabaseAdmin
+      .from('chat_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('profile_id', profileId)
+      .order('date', { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+    res.json(data || []);
+  } catch (e) {
+    console.error('[API] get chat logs error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/chat-logs', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const logs = req.body;
+    if (!userId || typeof userId !== 'string') return res.status(401).json({ error: '未登录' });
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase Admin missing' });
+
+    if (!Array.isArray(logs) || logs.length === 0) {
+      return res.status(400).json({ error: 'Invalid logs data' });
+    }
+
+    const rows = logs.map((log: any) => ({
+      user_id: userId,
+      profile_id: log.profileId || 'self',
+      role: log.role,
+      content: log.content,
+      model: log.model || 'unknown'
+    }));
+
+    const { error } = await supabaseAdmin.from('chat_logs').insert(rows);
+    if (error) throw error;
+
+    res.json({ success: true, count: rows.length });
+  } catch (e) {
+    console.error('[API] save chat logs error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});

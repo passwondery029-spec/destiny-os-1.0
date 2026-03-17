@@ -22,42 +22,34 @@ const getCurrentUserId = async (): Promise<string | null> => {
     return user?.id || null;
 };
 
-// 从数据库获取等级状态
-const getLevelFromDB = async (userId: string): Promise<UserLevelState | null> => {
-    console.log('[levelService] getLevelFromDB called for userId:', userId);
-    const { data, error } = await supabase
-        .from('user_levels')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-    
-    if (error) {
-        console.error('[levelService] getLevelFromDB error:', error.message);
+// 调用后端 API 获取等级
+const fetchLevelFromAPI = async (userId: string): Promise<UserLevelState | null> => {
+    try {
+        const response = await fetch(`/api/level`, {
+            headers: {
+                'x-user-id': userId
+            }
+        });
+        
+        if (!response.ok) {
+            const err = await response.json();
+            console.error('[levelService] API error:', err);
+            return null;
+        }
+        
+        const data = await response.json();
+        console.log('[levelService] getLevelState from API:', data);
+        return data;
+    } catch (e: any) {
+        console.error('[levelService] fetchLevelFromAPI error:', e);
         return null;
     }
-    
-    if (!data) {
-        console.log('[levelService] getLevelFromDB: no data found');
-        return null;
-    }
-    
-    console.log('[levelService] getLevelFromDB success:', data);
-    
-    // 确保 current_exp 和 total_exp 有默认值（防止 null）
-    return {
-        level: data.level ?? 1,
-        exp: data.current_exp ?? 0,
-        totalExp: data.total_exp ?? 0,
-        lastLoginDate: data.last_login_date || '',
-        lastDailyReportDate: data.last_daily_report_date || ''
-    };
 };
 
 // 从 localStorage 获取等级状态（兜底）
 const getLevelFromLocal = (): UserLevelState => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) {
-        // 返回新对象，避免修改 INITIAL_STATE 常量
         return { ...INITIAL_STATE };
     }
     const parsed = JSON.parse(stored);
@@ -70,150 +62,60 @@ const getLevelFromLocal = (): UserLevelState => {
     };
 };
 
-// 同步等级状态到数据库
-const syncLevelToDB = async (userId: string, state: UserLevelState): Promise<boolean> => {
-    console.log('[levelService] syncLevelToDB called with:', { userId, state });
-    
-    const { error } = await supabase
-        .from('user_levels')
-        .upsert({
-            user_id: userId,
-            level: state.level,
-            current_exp: state.exp,
-            total_exp: state.totalExp,
-            last_login_date: state.lastLoginDate,
-            last_daily_report_date: state.lastDailyReportDate,
-            updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' });
-    
-    if (error) {
-        console.error('[levelService] syncLevelToDB error:', error.message);
-        return false;
-    }
-    
-    console.log('[levelService] syncLevelToDB success');
-    
-    // 同时更新 localStorage 作为本地缓存
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    return true;
-};
-
-// 获取用户等级状态（异步，优先数据库）
+// 获取用户等级状态
 export const getLevelState = async (): Promise<UserLevelState> => {
     const userId = await getCurrentUserId();
-    const today = new Date().toISOString().split('T')[0];
     
     if (userId) {
-        // 尝试从数据库获取
-        const dbState = await getLevelFromDB(userId);
-        if (dbState) {
-            console.log('[levelService] getLevelState from DB:', dbState);
-            // 检查是否是新的一天，给予登录奖励
-            if (dbState.lastLoginDate !== today) {
-                console.log('[levelService] New day detected, adding login bonus. Last login:', dbState.lastLoginDate, 'Today:', today);
-                const newState = {
-                    ...dbState,
-                    lastLoginDate: today,
-                    exp: dbState.exp + 20,
-                    totalExp: dbState.totalExp + 20
-                };
-                // 检查升级
-                const nextLevel = LEVEL_CONFIGS.find(l => l.level === newState.level + 1);
-                if (nextLevel && newState.exp >= nextLevel.minExp) {
-                    newState.level += 1;
-                }
-                const syncSuccess = await syncLevelToDB(userId, newState);
-                if (syncSuccess) {
-                    console.log('[levelService] Login bonus synced to DB successfully');
-                    return newState;
-                } else {
-                    console.warn('[levelService] Login bonus sync failed, returning DB state without bonus');
-                    return dbState;
-                }
-            }
-            return dbState;
+        const apiState = await fetchLevelFromAPI(userId);
+        if (apiState) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(apiState));
+            return apiState;
         }
-        
-        // 数据库无数据，检查 localStorage 是否有旧数据
-        const localState = getLevelFromLocal();
-        console.log('[levelService] DB empty, localStorage:', localState);
-        
-        // 如果 localStorage 有有意义的数据（非初始状态），迁移到数据库
-        if (localState.exp > 0 || localState.totalExp > 0) {
-            console.log('[levelService] Migrating localStorage data to DB');
-            const stateToSave = {
-                ...localState,
-                lastLoginDate: today
-            };
-            // 检查是否需要添加登录奖励
-            if (localState.lastLoginDate !== today) {
-                stateToSave.exp += 20;
-                stateToSave.totalExp += 20;
-            }
-            await syncLevelToDB(userId, stateToSave);
-            return stateToSave;
-        }
-        
-        // 全新用户，初始化数据库
-        console.log('[levelService] Initializing new user level');
-        const initialState: UserLevelState = {
-            level: 1,
-            exp: 20, // 首次登录奖励
-            totalExp: 20,
-            lastLoginDate: today,
-            lastDailyReportDate: ''
-        };
-        await syncLevelToDB(userId, initialState);
-        return initialState;
     }
     
-    // 未登录，使用 localStorage
+    // 兜底用 localStorage
     const localState = getLevelFromLocal();
-    if (localState.lastLoginDate !== today) {
-        localState.lastLoginDate = today;
-        localState.exp += 20;
-        localState.totalExp += 20;
-        const nextLevel = LEVEL_CONFIGS.find(l => l.level === localState.level + 1);
-        if (nextLevel && localState.exp >= nextLevel.minExp) {
-            localState.level += 1;
-        }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(localState));
-    }
-    
     return localState;
 };
 
 // 添加灵力值
 export const addExp = async (amount: number): Promise<UserLevelState> => {
     const userId = await getCurrentUserId();
-    const state = await getLevelState();
     
-    console.log('[levelService] addExp called:', { amount, currentState: state });
-    
-    state.exp += amount;
-    state.totalExp += amount;
-    
-    // 检查升级
-    const nextLevel = LEVEL_CONFIGS.find(l => l.level === state.level + 1);
-    if (nextLevel && state.exp >= nextLevel.minExp) {
-        state.level += 1;
-        console.log('[levelService] Level up! New level:', state.level);
+    if (!userId) {
+        throw new Error('用户未登录');
     }
     
-    let syncSuccess = false;
-    if (userId) {
-        syncSuccess = await syncLevelToDB(userId, state);
-        if (!syncSuccess) {
-            console.error('[levelService] Failed to sync exp to DB');
-            throw new Error('Failed to sync level to database');
+    try {
+        const response = await fetch(`/api/level/add-exp`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': userId
+            },
+            body: JSON.stringify({ amount })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to add exp');
         }
-    } else {
+        
+        const result = await response.json();
+        const state: UserLevelState = {
+            level: 1, // 暂时简化
+            exp: result.exp,
+            totalExp: result.totalExp,
+            lastLoginDate: '',
+            lastDailyReportDate: ''
+        };
+        
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        console.log('[levelService] Updated localStorage only (no user logged in)');
+        return state;
+    } catch (e: any) {
+        console.error('[levelService] addExp error:', e);
+        throw e;
     }
-    
-    console.log('[levelService] addExp completed:', state);
-    return state;
 };
 
 // 获取当前等级配置
@@ -238,72 +140,51 @@ export const canGenerateTodayReport = async (): Promise<boolean> => {
 // 标记今日已生成报告（并给予灵力奖励）
 export const markTodayReportGenerated = async (): Promise<UserLevelState> => {
     const userId = await getCurrentUserId();
-    const state = await getLevelState();
-    const today = new Date().toISOString().split('T')[0];
     
-    console.log('[levelService] markTodayReportGenerated called');
-    
-    state.lastDailyReportDate = today;
-    state.exp += 50;
-    state.totalExp += 50;
-    
-    // 检查升级
-    const nextLevel = LEVEL_CONFIGS.find(l => l.level === state.level + 1);
-    if (nextLevel && state.exp >= nextLevel.minExp) {
-        state.level += 1;
+    if (!userId) {
+        throw new Error('用户未登录');
     }
     
-    let syncSuccess = false;
-    if (userId) {
-        syncSuccess = await syncLevelToDB(userId, state);
-        if (!syncSuccess) {
-            console.error('[levelService] Failed to sync report mark to DB');
-            throw new Error('Failed to sync level to database');
+    try {
+        const response = await fetch(`/api/level/mark-report`, {
+            method: 'POST',
+            headers: {
+                'x-user-id': userId
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to mark report');
         }
-    } else {
+        
+        const result = await response.json();
+        const state: UserLevelState = {
+            level: 1,
+            exp: result.exp,
+            totalExp: result.totalExp,
+            lastLoginDate: '',
+            lastDailyReportDate: ''
+        };
+        
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        return state;
+    } catch (e: any) {
+        console.error('[levelService] markTodayReportGenerated error:', e);
+        throw e;
     }
-    
-    return state;
 };
 
 // 直接升级到指定等级（付费解锁）
 export const instantUpgrade = async (targetLevel: number): Promise<UserLevelState> => {
-    const userId = await getCurrentUserId();
+    // 暂时简化实现
     const state = await getLevelState();
-    const targetConfig = LEVEL_CONFIGS.find(l => l.level === targetLevel);
-    
-    console.log('[levelService] instantUpgrade called:', { targetLevel });
-    
-    if (targetConfig) {
-        state.level = targetLevel;
-        state.exp = Math.max(state.exp, targetConfig.minExp);
-        
-        if (userId) {
-            const syncSuccess = await syncLevelToDB(userId, state);
-            if (!syncSuccess) {
-                console.error('[levelService] Failed to sync instant upgrade to DB');
-                throw new Error('Failed to sync level to database');
-            }
-        } else {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        }
-    }
-    
+    state.level = targetLevel;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     return state;
 };
 
 // 初始化用户等级（注册后调用）
 export const initUserLevel = async (userId: string): Promise<void> => {
-    const today = new Date().toISOString().split('T')[0];
-    const initialState: UserLevelState = {
-        level: 1,
-        exp: 20, // 首次登录奖励
-        totalExp: 20,
-        lastLoginDate: today,
-        lastDailyReportDate: ''
-    };
-    
-    console.log('[levelService] initUserLevel called for userId:', userId);
-    await syncLevelToDB(userId, initialState);
+    // 通过 API 初始化
+    await fetchLevelFromAPI(userId);
 };

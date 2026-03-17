@@ -8,9 +8,6 @@ export const RECHARGE_OPTIONS = [
     { price: 648, coins: 7500, bonus: 1500, label: '至尊' },
 ] as const;
 
-const LOCAL_BALANCE_KEY = 'destiny_os_balance';
-const LOCAL_TRANSACTIONS_KEY = 'destiny_os_transactions';
-
 export interface Transaction {
     id: string;
     type: 'SIGNUP' | 'RECHARGE' | 'DEDUCT' | 'WOODEN_FISH';
@@ -21,225 +18,149 @@ export interface Transaction {
     balanceAfter?: number;
 }
 
-/** 获取本地余额（兜底） */
-const getLocalBalance = (): number => {
-    return parseFloat(localStorage.getItem(LOCAL_BALANCE_KEY) || '0');
-};
-
-const setLocalBalance = (v: number) => {
-    localStorage.setItem(LOCAL_BALANCE_KEY, String(Math.max(0, v)));
-};
-
-const addLocalTransaction = (tx: Transaction) => {
-    const list: Transaction[] = JSON.parse(localStorage.getItem(LOCAL_TRANSACTIONS_KEY) || '[]');
-    list.unshift(tx);
-    localStorage.setItem(LOCAL_TRANSACTIONS_KEY, JSON.stringify(list.slice(0, 50)));
-};
-
-/** 写入交易记录到 Supabase */
-const recordTransactionToDB = async (
-    type: Transaction['type'],
-    amount: number,
-    balanceBefore: number,
-    balanceAfter: number,
-    description: string
-): Promise<void> => {
-    try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { error } = await supabase
-            .from('balance_transactions')
-            .insert({
-                user_id: user.id,
-                type,
-                amount,
-                balance_before: balanceBefore,
-                balance_after: balanceAfter,
-                description
-            });
-
-        if (error) {
-            console.error('[Wallet] Failed to record transaction to DB:', error.message);
-            throw error;
-        }
-        console.log('[Wallet] Transaction recorded to DB successfully');
-    } catch (e) {
-        console.error('[Wallet] Exception recording transaction:', e);
-        throw e;
+/** 获取用户 ID - 尝试多种方式 */
+const getUserId = async (): Promise<string | null> => {
+    // 方式1: 从 supabase auth 获取
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+        return user.id;
     }
+    
+    // 方式2: 从 session 获取
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.id) {
+        return session.user.id;
+    }
+    
+    // 方式3: 从 localStorage 获取 (某些登录方式可能存这里)
+    const stored = localStorage.getItem('sb-kvqqrlmapsfmskhhyyvm-auth-token');
+    if (stored) {
+        try {
+            const tokenData = JSON.parse(stored);
+            if (tokenData?.access_token) {
+                // 尝试解码 JWT 获取 user_id
+                const payload = JSON.parse(atob(tokenData.access_token.split('.')[1]));
+                if (payload?.sub) {
+                    return payload.sub;
+                }
+            }
+        } catch (e) {
+            console.warn('[Wallet] Failed to parse stored token:', e);
+        }
+    }
+    
+    return null;
 };
 
-/** 读取余额：优先从 Supabase user_metadata 读取 */
+/** 获取余额（通过后端 API） */
 export const getBalance = async (): Promise<number> => {
     try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.user_metadata?.balance !== undefined) {
-            const remoteBalance = Number(user.user_metadata.balance);
-            setLocalBalance(remoteBalance); // 同步本地
-            console.log('[Wallet] getBalance from user_metadata:', remoteBalance);
-            return remoteBalance;
+        const userId = await getUserId();
+        console.log('[Wallet] getBalance - userId:', userId);
+        if (!userId) {
+            console.warn('[Wallet] getBalance - no userId, returning 0');
+            return 0;
         }
+
+        const response = await fetch('/api/wallet/balance', {
+            headers: { 'x-user-id': userId }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch balance');
+        }
+        
+        const data = await response.json();
+        console.log('[Wallet] getBalance - response:', data);
+        return data.balance || 0;
     } catch (e) {
-        console.error('[Wallet] Failed to get balance from user_metadata:', e);
+        console.error('[Wallet] getBalance error:', e);
+        return 0;
     }
-    const localBalance = getLocalBalance();
-    console.log('[Wallet] getBalance from localStorage:', localBalance);
-    return localBalance;
 };
 
-/** 充值：增加余额并持久化 */
+/** 充值（通过后端 API） */
 export const addBalance = async (
     coins: number,
     desc: string,
     type: Transaction['type'] = 'RECHARGE'
 ): Promise<number> => {
-    const current = await getBalance();
-    const newBalance = current + coins;
-
-    console.log('[Wallet] addBalance called:', { coins, desc, type, current, newBalance });
-
-    // 1. 先写入 Supabase user_metadata
-    let metadataUpdateSuccess = false;
     try {
-        const { error } = await supabase.auth.updateUser({
-            data: { balance: newBalance }
+        const userId = await getUserId();
+        if (!userId) throw new Error('Not logged in');
+
+        const response = await fetch('/api/wallet/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': userId
+            },
+            body: JSON.stringify({ amount: coins, desc, type })
         });
-        if (error) {
-            console.error('[Wallet] Failed to update balance in user_metadata:', error.message);
-        } else {
-            metadataUpdateSuccess = true;
-            console.log('[Wallet] Successfully updated balance in user_metadata');
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || 'Failed to add balance');
         }
+
+        const data = await response.json();
+        return data.balance;
     } catch (e) {
-        console.error('[Wallet] Exception updating balance in user_metadata:', e);
+        console.error('[Wallet] addBalance error:', e);
+        throw e;
     }
-
-    // 2. 同步写入交易记录到数据库
-    let transactionRecordSuccess = false;
-    try {
-        await recordTransactionToDB(type, coins, current, newBalance, desc);
-        transactionRecordSuccess = true;
-        console.log('[Wallet] Successfully recorded transaction to DB');
-    } catch (e) {
-        console.error('[Wallet] Exception recording transaction to DB:', e);
-    }
-
-    // 3. 只有在数据库操作成功（至少一个成功）时才更新本地状态
-    if (metadataUpdateSuccess || transactionRecordSuccess) {
-        setLocalBalance(newBalance);
-        addLocalTransaction({
-            id: Date.now().toString(),
-            type,
-            amount: coins,
-            desc,
-            ts: Date.now(),
-            balanceBefore: current,
-            balanceAfter: newBalance
-        });
-        console.log('[Wallet] Local state updated');
-    } else {
-        console.error('[Wallet] All database operations failed, not updating local state');
-        throw new Error('Failed to update balance in database');
-    }
-
-    return newBalance;
 };
 
-/** 扣费：扣除天机币（生成报告消耗） */
+/** 扣费（通过后端 API） */
 export const deductBalance = async (amount: number, desc: string): Promise<{ success: boolean; newBalance: number }> => {
-    const current = await getBalance();
-    if (current < amount) {
-        return { success: false, newBalance: current };
-    }
-
-    const newBalance = current - amount;
-
-    console.log('[Wallet] deductBalance called:', { amount, desc, current, newBalance });
-
-    // 1. 先写入 Supabase user_metadata
-    let metadataUpdateSuccess = false;
     try {
-        const { error } = await supabase.auth.updateUser({
-            data: { balance: newBalance }
+        const userId = await getUserId();
+        if (!userId) throw new Error('Not logged in');
+
+        const response = await fetch('/api/wallet/deduct', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': userId
+            },
+            body: JSON.stringify({ amount, desc })
         });
-        if (error) {
-            console.error('[Wallet] Failed to update balance in user_metadata:', error.message);
-        } else {
-            metadataUpdateSuccess = true;
-            console.log('[Wallet] Successfully updated balance in user_metadata');
+
+        if (!response.ok) {
+            const err = await response.json();
+            if (err.error === '余额不足') {
+                const currentBalance = await getBalance();
+                return { success: false, newBalance: currentBalance };
+            }
+            throw new Error(err.error || 'Failed to deduct balance');
         }
+
+        const data = await response.json();
+        return { success: true, balance: data.balance };
     } catch (e) {
-        console.error('[Wallet] Exception updating balance in user_metadata:', e);
+        console.error('[Wallet] deductBalance error:', e);
+        const currentBalance = await getBalance();
+        return { success: false, newBalance: currentBalance };
     }
-
-    // 2. 同步写入交易记录到数据库
-    let transactionRecordSuccess = false;
-    try {
-        await recordTransactionToDB('DEDUCT', -amount, current, newBalance, desc);
-        transactionRecordSuccess = true;
-        console.log('[Wallet] Successfully recorded transaction to DB');
-    } catch (e) {
-        console.error('[Wallet] Exception recording transaction to DB:', e);
-    }
-
-    // 3. 只有在数据库操作成功（至少一个成功）时才更新本地状态
-    if (metadataUpdateSuccess || transactionRecordSuccess) {
-        setLocalBalance(newBalance);
-        addLocalTransaction({
-            id: Date.now().toString(),
-            type: 'DEDUCT',
-            amount: -amount, // 扣费显示为负数
-            desc,
-            ts: Date.now(),
-            balanceBefore: current,
-            balanceAfter: newBalance
-        });
-        console.log('[Wallet] Local state updated');
-    } else {
-        console.error('[Wallet] All database operations failed, not updating local state');
-        return { success: false, newBalance: current };
-    }
-
-    return { success: true, newBalance: newBalance };
 };
 
-/** 读取交易记录：优先从 Supabase 读取，失败则 localStorage 兜底 */
+/** 获取交易记录（通过后端 API） */
 export const getTransactions = async (): Promise<Transaction[]> => {
     try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            return getLocalTransactions();
+        const userId = await getUserId();
+        if (!userId) return [];
+
+        const response = await fetch('/api/wallet/transactions', {
+            headers: { 'x-user-id': userId }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch transactions');
         }
 
-        const { data, error } = await supabase
-            .from('balance_transactions')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(50);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-            return data.map(tx => ({
-                id: tx.id,
-                type: tx.type as Transaction['type'],
-                amount: tx.amount,
-                desc: tx.description,
-                ts: new Date(tx.created_at).getTime(),
-                balanceBefore: tx.balance_before,
-                balanceAfter: tx.balance_after
-            }));
-        }
+        return await response.json();
     } catch (e) {
-        console.error('[Wallet] Failed to fetch transactions from DB:', e);
+        console.error('[Wallet] getTransactions error:', e);
+        return [];
     }
-    
-    return getLocalTransactions();
-};
-
-/** 获取本地交易记录（兜底） */
-const getLocalTransactions = (): Transaction[] => {
-    return JSON.parse(localStorage.getItem(LOCAL_TRANSACTIONS_KEY) || '[]');
 };
