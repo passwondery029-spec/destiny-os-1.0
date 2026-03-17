@@ -30,14 +30,20 @@ const getLevelFromDB = async (userId: string): Promise<UserLevelState | null> =>
         .eq('user_id', userId)
         .single();
     
-    if (error || !data) {
+    if (error) {
+        console.error('[levelService] getLevelFromDB error:', error.message);
         return null;
     }
     
+    if (!data) {
+        return null;
+    }
+    
+    // 确保 exp 和 total_exp 有默认值（防止 null）
     return {
-        level: data.level,
-        exp: data.exp,
-        totalExp: data.total_exp,
+        level: data.level ?? 1,
+        exp: data.exp ?? 0,
+        totalExp: data.total_exp ?? 0,
         lastLoginDate: data.last_login_date || '',
         lastDailyReportDate: data.last_daily_report_date || ''
     };
@@ -88,8 +94,10 @@ export const getLevelState = async (): Promise<UserLevelState> => {
     const today = new Date().toISOString().split('T')[0];
     
     if (userId) {
+        // 尝试从数据库获取
         const dbState = await getLevelFromDB(userId);
         if (dbState) {
+            console.log('[levelService] getLevelState from DB:', dbState);
             // 检查是否是新的一天，给予登录奖励
             if (dbState.lastLoginDate !== today) {
                 const newState = {
@@ -108,9 +116,41 @@ export const getLevelState = async (): Promise<UserLevelState> => {
             }
             return dbState;
         }
+        
+        // 数据库无数据，检查 localStorage 是否有旧数据
+        const localState = getLevelFromLocal();
+        console.log('[levelService] DB empty, localStorage:', localState);
+        
+        // 如果 localStorage 有有意义的数据（非初始状态），迁移到数据库
+        if (localState.exp > 0 || localState.totalExp > 0) {
+            console.log('[levelService] Migrating localStorage data to DB');
+            const stateToSave = {
+                ...localState,
+                lastLoginDate: today
+            };
+            // 检查是否需要添加登录奖励
+            if (localState.lastLoginDate !== today) {
+                stateToSave.exp += 20;
+                stateToSave.totalExp += 20;
+            }
+            await syncLevelToDB(userId, stateToSave);
+            return stateToSave;
+        }
+        
+        // 全新用户，初始化数据库
+        console.log('[levelService] Initializing new user level');
+        const initialState: UserLevelState = {
+            level: 1,
+            exp: 20, // 首次登录奖励
+            totalExp: 20,
+            lastLoginDate: today,
+            lastDailyReportDate: ''
+        };
+        await syncLevelToDB(userId, initialState);
+        return initialState;
     }
     
-    // 未登录或数据库无数据，使用 localStorage
+    // 未登录，使用 localStorage
     const localState = getLevelFromLocal();
     if (localState.lastLoginDate !== today) {
         localState.lastLoginDate = today;
@@ -121,11 +161,6 @@ export const getLevelState = async (): Promise<UserLevelState> => {
             localState.level += 1;
         }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(localState));
-        
-        // 如果已登录，同步到数据库
-        if (userId) {
-            await syncLevelToDB(userId, localState);
-        }
     }
     
     return localState;
