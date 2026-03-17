@@ -341,7 +341,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
 
             // 天机币返还逻辑：每发5条消息返还1币
             if (newMessageCount % 5 === 0) {
-                const newBalance = await addBalance(1, '消息返还');
+                const newBalance = await addBalance(1, '消息返还', 'RECHARGE');
                 setBalance(newBalance);
                 // 可以给用户一个提示
                 setMessages(prev => [...prev, {

@@ -51,7 +51,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
         setIsLoadingBalance(true);
         const b = await getBalance();
         setBalance(b);
-        setTransactions(getTransactions());
+        setTransactions(await getTransactions());
         setIsLoadingBalance(false);
     }, []);
 

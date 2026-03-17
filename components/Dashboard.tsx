@@ -147,7 +147,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
         
         // 每10次获得1枚天机币
         if (newClickCount % 10 === 0) {
-            addBalance(1, '木鱼诵经');
+            addBalance(1, '木鱼诵经', 'WOODEN_FISH');
             setBalance(b => b + 1);
         }
     };
