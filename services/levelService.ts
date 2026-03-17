@@ -39,10 +39,10 @@ const getLevelFromDB = async (userId: string): Promise<UserLevelState | null> =>
         return null;
     }
     
-    // 确保 exp 和 total_exp 有默认值（防止 null）
+    // 确保 current_exp 和 total_exp 有默认值（防止 null）
     return {
         level: data.level ?? 1,
-        exp: data.exp ?? 0,
+        exp: data.current_exp ?? 0,
         totalExp: data.total_exp ?? 0,
         lastLoginDate: data.last_login_date || '',
         lastDailyReportDate: data.last_daily_report_date || ''
@@ -73,7 +73,7 @@ const syncLevelToDB = async (userId: string, state: UserLevelState): Promise<voi
         .upsert({
             user_id: userId,
             level: state.level,
-            exp: state.exp,
+            current_exp: state.exp,
             total_exp: state.totalExp,
             last_login_date: state.lastLoginDate,
             last_daily_report_date: state.lastDailyReportDate,
