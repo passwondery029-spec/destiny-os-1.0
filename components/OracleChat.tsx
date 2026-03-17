@@ -4,7 +4,6 @@ import { sendMessageToOracle, generateReportContent, initializeChat } from '../s
 import { supabase } from '../services/supabaseClient';
 import { useUserData } from '../contexts/UserDataContext';
 import { ChatMessage, UserProfile, AppRoute } from '../types';
-import { MOCK_PROFILES, USER_STATS } from '../services/mockDataService';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     PaperAirplaneIcon, SparklesIcon, ArrowsRightLeftIcon,
@@ -40,6 +39,8 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         balance, 
         levelConfig, 
         profiles,
+        activeProfile,
+        setActiveProfileId,
         deductBalance, 
         addBalance, 
         addExp, 
@@ -57,7 +58,6 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     const [isLoadingHistory, setIsLoadingHistory] = useState(false); // 专门用于历史加载
     const [isSendingMessage, setIsSendingMessage] = useState(false); // 专门用于发送消息
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-    const [activeProfile, setActiveProfile] = useState<UserProfile | null>(null);
     const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
     const [showTools, setShowTools] = useState(false);
     const [lastGeneratedReport, setLastGeneratedReport] = useState<DestinyReport | null>(null);
@@ -121,23 +121,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         }
     }, [currentRoute]); // 当路由变化时触发
 
-    // Load profiles on mount (Async)
-    useEffect(() => {
-        const initProfiles = async () => {
-            if (!activeProfile) {
-                const { getProfiles } = await import('../services/profileService');
-                const profiles = await getProfiles();
-                if (profiles && profiles.length > 0) {
-                    setActiveProfile(profiles[0]);
-                } else {
-                    setActiveProfile(MOCK_PROFILES[0]);
-                }
-            }
-        };
-        initProfiles();
-    }, []);
-
-    // Load History on Mount or Profile Change
+    // 聊天历史从 localStorage 加载
     // localStorage key for chat history
     const getChatStorageKey = (profileId: string) => `destiny_chat_${profileId}`;
 
@@ -687,11 +671,11 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
                         >
                             <div className="p-2 bg-stone-50 border-b border-stone-100 text-xs font-bold text-stone-500 uppercase tracking-wider">切换咨询对象</div>
                             <div className="max-h-60 overflow-y-auto p-1">
-                                {MOCK_PROFILES.map(p => (
+                                {profiles.map(p => (
                                     <button
                                         key={p.id}
-                                        onClick={() => { setActiveProfile(p); setShowProfileSwitcher(false); }}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-serif flex items-center gap-2 hover:bg-stone-50 transition-colors ${activeProfile.id === p.id ? 'bg-[#F7F7F5] text-[#8B0000]' : 'text-stone-700'}`}
+                                        onClick={() => { setActiveProfileId(p.id); setShowProfileSwitcher(false); }}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-serif flex items-center gap-2 hover:bg-stone-50 transition-colors ${activeProfile?.id === p.id ? 'bg-[#F7F7F5] text-[#8B0000]' : 'text-stone-700'}`}
                                     >
                                         <span className="w-2 h-2 rounded-full" style={{ background: p.avatarColor }}></span>
                                         {p.name}
