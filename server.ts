@@ -109,16 +109,16 @@ app.post('/api/chat', async (req, res) => {
     }
     apiMessages.push(...messages);
 
-    // 构建算力限制的系统提示
-    let computingPowerInstruction = '';
+    // 根据等级配置注入算力限制的提示词
     if (levelConfig && levelConfig._maxResponseLength) {
-      computingPowerInstruction = `\n\n【算力优化】当前连接为优化模式，请精炼表达，突出重点。`;
+      const maxLen = levelConfig._maxResponseLength;
+      const lengthInstruction = `\n\n【回复要求】当前连接为优化模式，请将回复控制在${maxLen}字以内，精炼表达，突出重点。言简意赅，避免冗长。`;
       
-      // 修改最后一个 system message 或者添加新的 system message
+      // 添加到第一条 system message
       if (apiMessages.length > 0 && apiMessages[0].role === 'system') {
-        apiMessages[0].content += computingPowerInstruction;
+        apiMessages[0].content += lengthInstruction;
       } else {
-        apiMessages.unshift({ role: 'system', content: computingPowerInstruction });
+        apiMessages.unshift({ role: 'system', content: lengthInstruction.trim() });
       }
     }
 
@@ -140,27 +140,7 @@ app.post('/api/chat', async (req, res) => {
       temperature: temperature || 0.7,
     });
 
-    let replyText = response.choices[0]?.message?.content || '';
-
-    // 确保回复不超过字数限制（双重保险）
-    if (levelConfig && levelConfig._maxResponseLength && replyText.length > levelConfig._maxResponseLength) {
-      // 尝试在标点符号处截断，保持语义完整
-      const truncatedText = replyText.substring(0, levelConfig._maxResponseLength);
-      const lastPunctuation = Math.max(
-        truncatedText.lastIndexOf('。'),
-        truncatedText.lastIndexOf('！'),
-        truncatedText.lastIndexOf('？'),
-        truncatedText.lastIndexOf('\n')
-      );
-      
-      if (lastPunctuation > levelConfig._maxResponseLength * 0.5) {
-        replyText = truncatedText.substring(0, lastPunctuation + 1);
-      } else {
-        replyText = truncatedText + '...';
-      }
-      
-      console.log(`[算力优化] 原回复 ${response.choices[0]?.message?.content?.length || 0} 字，优化为 ${replyText.length} 字`);
-    }
+    const replyText = response.choices[0]?.message?.content || '';
 
     // AI 回复保存已移至前端（与用户消息一起批量写入，通过 RLS）
     // 服务端仅在有 supabaseAdmin 时备份写入
@@ -465,16 +445,16 @@ async function runChatLogCleanupJob() {
 
 // Level Configs (must match frontend constants.ts)
 const LEVEL_CONFIGS = [
-  { level: 1, title: '初窥门径', minExp: 0, maxMemoryContext: 5, freeReportQuota: 1, unlockPrice: 0, maxMemoryCount: 50 },
-  { level: 2, title: '炼气化神', minExp: 100, maxMemoryContext: 10, freeReportQuota: 2, unlockPrice: 6, maxMemoryCount: 100 },
-  { level: 3, title: '筑基修士', minExp: 300, maxMemoryContext: 20, freeReportQuota: 3, unlockPrice: 18, maxMemoryCount: 200 },
-  { level: 4, title: '金丹大成', minExp: 800, maxMemoryContext: 30, freeReportQuota: 5, unlockPrice: 68, maxMemoryCount: 300 },
-  { level: 5, title: '元婴老祖', minExp: 2000, maxMemoryContext: 50, freeReportQuota: 8, unlockPrice: 128, maxMemoryCount: 500 },
-  { level: 6, title: '化神尊者', minExp: 5000, maxMemoryContext: 80, freeReportQuota: 10, unlockPrice: 198, maxMemoryCount: 800 },
-  { level: 7, title: '返虚地仙', minExp: 10000, maxMemoryContext: 120, freeReportQuota: 15, unlockPrice: 328, maxMemoryCount: 1200 },
-  { level: 8, title: '大乘天仙', minExp: 25000, maxMemoryContext: 200, freeReportQuota: 20, unlockPrice: 648, maxMemoryCount: 2000 },
-  { level: 9, title: '九天玄仙', minExp: 50000, maxMemoryContext: 300, freeReportQuota: 30, unlockPrice: 1288, maxMemoryCount: 3000 },
-  { level: 10, title: '太上道祖', minExp: 100000, maxMemoryContext: 500, freeReportQuota: 50, unlockPrice: 0, maxMemoryCount: 9999 },
+  { level: 1, title: '初窥门径', minExp: 0, maxMemoryContext: 5, unlockPrice: 0, maxMemoryCount: 50, computingPowerPercent: 100, _maxChatHistory: 3, _maxResponseLength: 80 },
+  { level: 2, title: '炼气化神', minExp: 100, maxMemoryContext: 10, unlockPrice: 6, maxMemoryCount: 100, computingPowerPercent: 150, _maxChatHistory: 5, _maxResponseLength: 150 },
+  { level: 3, title: '筑基修士', minExp: 300, maxMemoryContext: 20, unlockPrice: 18, maxMemoryCount: 200, computingPowerPercent: 200, _maxChatHistory: 8, _maxResponseLength: 250 },
+  { level: 4, title: '金丹大成', minExp: 800, maxMemoryContext: 30, unlockPrice: 68, maxMemoryCount: 300, computingPowerPercent: 280, _maxChatHistory: 12, _maxResponseLength: 400 },
+  { level: 5, title: '元婴老祖', minExp: 2000, maxMemoryContext: 50, unlockPrice: 128, maxMemoryCount: 500, computingPowerPercent: 380, _maxChatHistory: 18, _maxResponseLength: 600 },
+  { level: 6, title: '化神尊者', minExp: 5000, maxMemoryContext: 80, unlockPrice: 198, maxMemoryCount: 800, computingPowerPercent: 500, _maxChatHistory: 25, _maxResponseLength: 900 },
+  { level: 7, title: '返虚地仙', minExp: 10000, maxMemoryContext: 120, unlockPrice: 328, maxMemoryCount: 1200, computingPowerPercent: 650, _maxChatHistory: 35, _maxResponseLength: 1200 },
+  { level: 8, title: '大乘天仙', minExp: 25000, maxMemoryContext: 200, unlockPrice: 648, maxMemoryCount: 2000, computingPowerPercent: 850, _maxChatHistory: 50, _maxResponseLength: 1800 },
+  { level: 9, title: '九天玄仙', minExp: 50000, maxMemoryContext: 300, unlockPrice: 1288, maxMemoryCount: 3000, computingPowerPercent: 1000, _maxChatHistory: 80, _maxResponseLength: 2500 },
+  { level: 10, title: '太上道祖', minExp: 100000, maxMemoryContext: 500, unlockPrice: 0, maxMemoryCount: 9999, computingPowerPercent: 1500, _maxChatHistory: 150, _maxResponseLength: 5000 },
 ];
 
 // Get user memory limit based on level

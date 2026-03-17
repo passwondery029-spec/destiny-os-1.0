@@ -84,7 +84,6 @@ export interface OracleLevelConfig {
   title: string; // e.g. "炼气士"
   minExp: number;
   maxMemoryContext: number; // How many memories AI can recall
-  freeReportQuota: number; // Daily free reports
   unlockPrice?: number; // Price to instantly unlock (CNY)
   maxMemoryCount: number; // Maximum number of memory fragments allowed
   computingPowerPercent: number; // 算力百分比显示给用户 (100%, 150%, 200%...)
@@ -94,10 +93,11 @@ export interface OracleLevelConfig {
 }
 
 export interface UserLevelState {
-  currentLevel: number;
-  currentExp: number;
-  todayReportCount: number;
+  level: number;
+  exp: number;
+  totalExp: number;
   lastLoginDate: string;
+  lastDailyReportDate: string;
 }
 
 export interface NotificationSettings {

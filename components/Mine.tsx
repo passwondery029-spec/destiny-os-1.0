@@ -9,7 +9,7 @@ import {
     ArrowTrendingUpIcon
 } from '@heroicons/react/24/outline';
 import { CheckBadgeIcon } from '@heroicons/react/24/solid';
-import { getLevelState, getCurrentLevelConfig } from '../services/levelService';
+import { getLevelState, getCurrentLevelConfig, UserLevelState } from '../services/levelService';
 import { LEVEL_CONFIGS } from '../constants';
 import { supabase } from '../services/supabaseClient';
 import { Session } from '@supabase/supabase-js';
@@ -43,8 +43,14 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
     const [idCardInput, setIdCardInput] = useState('');
 
     // Level State
-    const [levelState, setLevelState] = useState(getLevelState());
-    const currentConfig = getCurrentLevelConfig();
+    const [levelState, setLevelState] = useState<UserLevelState>({
+        level: 1,
+        exp: 0,
+        totalExp: 0,
+        lastLoginDate: '',
+        lastDailyReportDate: ''
+    });
+    const [currentConfig, setCurrentConfig] = useState(LEVEL_CONFIGS[0]);
     const nextConfig = LEVEL_CONFIGS.find(l => l.level === currentConfig.level + 1);
 
     const refreshBalance = useCallback(async () => {
@@ -57,7 +63,12 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
 
     // 初始化：使用 props 传入的 session，只在需要时监听变化
     useEffect(() => {
-        setLevelState(getLevelState());
+        // 异步加载等级状态
+        getLevelState().then(state => {
+            setLevelState(state);
+            const config = LEVEL_CONFIGS.find(l => l.level === state.level) || LEVEL_CONFIGS[0];
+            setCurrentConfig(config);
+        });
         refreshBalance();
 
         // 优先使用 props 传入的 session
@@ -250,7 +261,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                         </p>
                     </div>
                     <div className="text-right flex flex-col items-end">
-                        <p className="text-2xl font-bold text-white tabular-nums">{levelState.currentExp}</p>
+                        <p className="text-2xl font-bold text-white tabular-nums">{levelState.exp}</p>
                         <p className="text-stone-500 text-[10px] mb-1">当前灵力值</p>
                         <button
                             onClick={() => setActiveModal('LEVEL_PRIVILEGES')}

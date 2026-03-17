@@ -4,7 +4,8 @@ import { sendMessageToOracle, generateReportContent, initializeChat } from '../s
 import { supabase } from '../services/supabaseClient';
 import { addReport } from '../services/reportService';
 import { getCurrentLevelConfig, addExp } from '../services/levelService';
-import { ChatMessage, UserProfile, AppRoute } from '../types';
+import { LEVEL_CONFIGS } from '../constants';
+import { ChatMessage, UserProfile, AppRoute, OracleLevelConfig } from '../types';
 import { getBalance, deductBalance, addBalance } from '../services/walletService';
 import { MOCK_PROFILES, USER_STATS } from '../services/mockDataService';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -63,7 +64,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
     const [messageCount, setMessageCount] = useState(0); // 消息计数，用于返还逻辑
 
     // Level State
-    const levelConfig = getCurrentLevelConfig();
+    const [levelConfig, setLevelConfig] = useState<OracleLevelConfig>(LEVEL_CONFIGS[0]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const hasProcessedPrompt = useRef(false);
@@ -140,6 +141,11 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
             setBalance(b);
         };
         loadBalance();
+        
+        // 加载等级配置
+        getCurrentLevelConfig().then(config => {
+            setLevelConfig(config);
+        });
     }, []);
 
     // Load History on Mount or Profile Change
@@ -305,7 +311,7 @@ const OracleChat: React.FC<OracleChatProps> = ({ initialPrompt, onPromptConsumed
         setMessages(prev => [...prev, userMsg]);
         setIsSendingMessage(true);
 
-        // Add XP for chatting
+        // Add XP for chatting (fire and forget)
         addExp(5);
 
         try {

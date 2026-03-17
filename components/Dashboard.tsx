@@ -5,7 +5,7 @@ import {
     AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid
 } from 'recharts';
 import { THEME_COLORS } from '../constants';
-import { getLevelState, getCurrentLevelConfig, canGenerateTodayReport, markTodayReportGenerated } from '../services/levelService';
+import { canGenerateTodayReport, markTodayReportGenerated, addExp } from '../services/levelService';
 import { generateDailyFortune, DailyFortune } from '../services/fortuneService';
 import { getProfiles } from '../services/profileService';
 import { supabase } from '../services/supabaseClient';
@@ -49,7 +49,6 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
     const [fortune, setFortune] = useState<DailyFortune | null>(null);
     const [balance, setBalance] = useState(0);
-    const [freeReportsLeft, setFreeReportsLeft] = useState(0);
     const [showPaywall, setShowPaywall] = useState(false); // 充値提示弹窗
     const [isGenerating, setIsGenerating] = useState(false); // 正在生成报告的状态
     const [todayReportGenerated, setTodayReportGenerated] = useState(false); // 今日是否已生成报告
@@ -63,7 +62,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
 
     useEffect(() => {
         // 检查今日是否已生成过报告
-        setTodayReportGenerated(!canGenerateTodayReport());
+        canGenerateTodayReport().then(canGenerate => {
+            setTodayReportGenerated(!canGenerate);
+        });
         
         // Initialize Fortune
         getProfiles().then(profiles => {
@@ -112,11 +113,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
             localStorage.setItem(fishClickKey, JSON.stringify({ date: today, count: 0 }));
         }
 
-        // Load balance & free quota
+        // Load balance
         getBalance().then(b => setBalance(b));
-        const config = getCurrentLevelConfig();
-        const levelState = getLevelState();
-        setFreeReportsLeft(Math.max(0, config.freeReportQuota - levelState.todayReportCount));
 
         return () => subscription.unsubscribe();
     }, []);
@@ -259,14 +257,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToChat }) => {
 - 不要在报告末尾添加括号备注或系统指令`;
 
             // 1️⃣ 先检查今日是否已生成
-            if (!canGenerateTodayReport()) {
+            const canGenerate = await canGenerateTodayReport();
+            if (!canGenerate) {
                 // 今日已生成，直接跳转到天机阁查看
                 onNavigateToChat('');
                 return;
             }
 
             // 2️⃣ 生成报告并标记今日已生成
-            markTodayReportGenerated();
+            await markTodayReportGenerated();
             setTodayReportGenerated(true);  // 更新按钮状态
             onNavigateToChat(detailedPrompt);
         } finally {
