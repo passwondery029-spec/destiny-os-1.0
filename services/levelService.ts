@@ -67,7 +67,9 @@ const getLevelFromLocal = (): UserLevelState => {
 };
 
 // 同步等级状态到数据库
-const syncLevelToDB = async (userId: string, state: UserLevelState): Promise<void> => {
+const syncLevelToDB = async (userId: string, state: UserLevelState): Promise<boolean> => {
+    console.log('[levelService] syncLevelToDB called with:', { userId, state });
+    
     const { error } = await supabase
         .from('user_levels')
         .upsert({
@@ -82,10 +84,14 @@ const syncLevelToDB = async (userId: string, state: UserLevelState): Promise<voi
     
     if (error) {
         console.error('[levelService] syncLevelToDB error:', error.message);
+        return false;
     }
+    
+    console.log('[levelService] syncLevelToDB success');
     
     // 同时更新 localStorage 作为本地缓存
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
 };
 
 // 获取用户等级状态（异步，优先数据库）
@@ -100,6 +106,7 @@ export const getLevelState = async (): Promise<UserLevelState> => {
             console.log('[levelService] getLevelState from DB:', dbState);
             // 检查是否是新的一天，给予登录奖励
             if (dbState.lastLoginDate !== today) {
+                console.log('[levelService] New day detected, adding login bonus. Last login:', dbState.lastLoginDate, 'Today:', today);
                 const newState = {
                     ...dbState,
                     lastLoginDate: today,
@@ -111,8 +118,14 @@ export const getLevelState = async (): Promise<UserLevelState> => {
                 if (nextLevel && newState.exp >= nextLevel.minExp) {
                     newState.level += 1;
                 }
-                await syncLevelToDB(userId, newState);
-                return newState;
+                const syncSuccess = await syncLevelToDB(userId, newState);
+                if (syncSuccess) {
+                    console.log('[levelService] Login bonus synced to DB successfully');
+                    return newState;
+                } else {
+                    console.warn('[levelService] Login bonus sync failed, returning DB state without bonus');
+                    return dbState;
+                }
             }
             return dbState;
         }
