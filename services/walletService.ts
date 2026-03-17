@@ -61,9 +61,12 @@ const recordTransactionToDB = async (
 
         if (error) {
             console.error('[Wallet] Failed to record transaction to DB:', error.message);
+            throw error;
         }
+        console.log('[Wallet] Transaction recorded to DB successfully');
     } catch (e) {
         console.error('[Wallet] Exception recording transaction:', e);
+        throw e;
     }
 };
 
@@ -74,12 +77,15 @@ export const getBalance = async (): Promise<number> => {
         if (user?.user_metadata?.balance !== undefined) {
             const remoteBalance = Number(user.user_metadata.balance);
             setLocalBalance(remoteBalance); // 同步本地
+            console.log('[Wallet] getBalance from user_metadata:', remoteBalance);
             return remoteBalance;
         }
     } catch (e) {
-        // ignore
+        console.error('[Wallet] Failed to get balance from user_metadata:', e);
     }
-    return getLocalBalance();
+    const localBalance = getLocalBalance();
+    console.log('[Wallet] getBalance from localStorage:', localBalance);
+    return localBalance;
 };
 
 /** 充值：增加余额并持久化 */
@@ -91,30 +97,51 @@ export const addBalance = async (
     const current = await getBalance();
     const newBalance = current + coins;
 
-    // 写入 Supabase user_metadata
+    console.log('[Wallet] addBalance called:', { coins, desc, type, current, newBalance });
+
+    // 1. 先写入 Supabase user_metadata
+    let metadataUpdateSuccess = false;
     try {
-        await supabase.auth.updateUser({
+        const { error } = await supabase.auth.updateUser({
             data: { balance: newBalance }
         });
+        if (error) {
+            console.error('[Wallet] Failed to update balance in user_metadata:', error.message);
+        } else {
+            metadataUpdateSuccess = true;
+            console.log('[Wallet] Successfully updated balance in user_metadata');
+        }
     } catch (e) {
-        console.error('[Wallet] Failed to update balance in user_metadata:', e);
+        console.error('[Wallet] Exception updating balance in user_metadata:', e);
     }
 
-    setLocalBalance(newBalance);
+    // 2. 同步写入交易记录到数据库
+    let transactionRecordSuccess = false;
+    try {
+        await recordTransactionToDB(type, coins, current, newBalance, desc);
+        transactionRecordSuccess = true;
+        console.log('[Wallet] Successfully recorded transaction to DB');
+    } catch (e) {
+        console.error('[Wallet] Exception recording transaction to DB:', e);
+    }
 
-    // 记录到本地
-    addLocalTransaction({
-        id: Date.now().toString(),
-        type,
-        amount: coins,
-        desc,
-        ts: Date.now(),
-        balanceBefore: current,
-        balanceAfter: newBalance
-    });
-
-    // 同步写入数据库
-    await recordTransactionToDB(type, coins, current, newBalance, desc);
+    // 3. 只有在数据库操作成功（至少一个成功）时才更新本地状态
+    if (metadataUpdateSuccess || transactionRecordSuccess) {
+        setLocalBalance(newBalance);
+        addLocalTransaction({
+            id: Date.now().toString(),
+            type,
+            amount: coins,
+            desc,
+            ts: Date.now(),
+            balanceBefore: current,
+            balanceAfter: newBalance
+        });
+        console.log('[Wallet] Local state updated');
+    } else {
+        console.error('[Wallet] All database operations failed, not updating local state');
+        throw new Error('Failed to update balance in database');
+    }
 
     return newBalance;
 };
@@ -128,31 +155,53 @@ export const deductBalance = async (amount: number, desc: string): Promise<{ suc
 
     const newBalance = current - amount;
 
+    console.log('[Wallet] deductBalance called:', { amount, desc, current, newBalance });
+
+    // 1. 先写入 Supabase user_metadata
+    let metadataUpdateSuccess = false;
     try {
-        await supabase.auth.updateUser({
+        const { error } = await supabase.auth.updateUser({
             data: { balance: newBalance }
         });
+        if (error) {
+            console.error('[Wallet] Failed to update balance in user_metadata:', error.message);
+        } else {
+            metadataUpdateSuccess = true;
+            console.log('[Wallet] Successfully updated balance in user_metadata');
+        }
     } catch (e) {
-        console.error('[Wallet] Failed to update balance in user_metadata:', e);
+        console.error('[Wallet] Exception updating balance in user_metadata:', e);
     }
 
-    setLocalBalance(newBalance);
+    // 2. 同步写入交易记录到数据库
+    let transactionRecordSuccess = false;
+    try {
+        await recordTransactionToDB('DEDUCT', -amount, current, newBalance, desc);
+        transactionRecordSuccess = true;
+        console.log('[Wallet] Successfully recorded transaction to DB');
+    } catch (e) {
+        console.error('[Wallet] Exception recording transaction to DB:', e);
+    }
 
-    // 记录到本地
-    addLocalTransaction({
-        id: Date.now().toString(),
-        type: 'DEDUCT',
-        amount: -amount, // 扣费显示为负数
-        desc,
-        ts: Date.now(),
-        balanceBefore: current,
-        balanceAfter: newBalance
-    });
+    // 3. 只有在数据库操作成功（至少一个成功）时才更新本地状态
+    if (metadataUpdateSuccess || transactionRecordSuccess) {
+        setLocalBalance(newBalance);
+        addLocalTransaction({
+            id: Date.now().toString(),
+            type: 'DEDUCT',
+            amount: -amount, // 扣费显示为负数
+            desc,
+            ts: Date.now(),
+            balanceBefore: current,
+            balanceAfter: newBalance
+        });
+        console.log('[Wallet] Local state updated');
+    } else {
+        console.error('[Wallet] All database operations failed, not updating local state');
+        return { success: false, newBalance: current };
+    }
 
-    // 同步写入数据库
-    await recordTransactionToDB('DEDUCT', -amount, current, newBalance, desc);
-
-    return { success: true, newBalance };
+    return { success: true, newBalance: newBalance };
 };
 
 /** 读取交易记录：优先从 Supabase 读取，失败则 localStorage 兜底 */

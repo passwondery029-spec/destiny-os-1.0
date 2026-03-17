@@ -24,6 +24,7 @@ const getCurrentUserId = async (): Promise<string | null> => {
 
 // 从数据库获取等级状态
 const getLevelFromDB = async (userId: string): Promise<UserLevelState | null> => {
+    console.log('[levelService] getLevelFromDB called for userId:', userId);
     const { data, error } = await supabase
         .from('user_levels')
         .select('*')
@@ -36,8 +37,11 @@ const getLevelFromDB = async (userId: string): Promise<UserLevelState | null> =>
     }
     
     if (!data) {
+        console.log('[levelService] getLevelFromDB: no data found');
         return null;
     }
+    
+    console.log('[levelService] getLevelFromDB success:', data);
     
     // 确保 current_exp 和 total_exp 有默认值（防止 null）
     return {
@@ -184,6 +188,8 @@ export const addExp = async (amount: number): Promise<UserLevelState> => {
     const userId = await getCurrentUserId();
     const state = await getLevelState();
     
+    console.log('[levelService] addExp called:', { amount, currentState: state });
+    
     state.exp += amount;
     state.totalExp += amount;
     
@@ -191,14 +197,22 @@ export const addExp = async (amount: number): Promise<UserLevelState> => {
     const nextLevel = LEVEL_CONFIGS.find(l => l.level === state.level + 1);
     if (nextLevel && state.exp >= nextLevel.minExp) {
         state.level += 1;
+        console.log('[levelService] Level up! New level:', state.level);
     }
     
+    let syncSuccess = false;
     if (userId) {
-        await syncLevelToDB(userId, state);
+        syncSuccess = await syncLevelToDB(userId, state);
+        if (!syncSuccess) {
+            console.error('[levelService] Failed to sync exp to DB');
+            throw new Error('Failed to sync level to database');
+        }
     } else {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        console.log('[levelService] Updated localStorage only (no user logged in)');
     }
     
+    console.log('[levelService] addExp completed:', state);
     return state;
 };
 
@@ -227,6 +241,8 @@ export const markTodayReportGenerated = async (): Promise<UserLevelState> => {
     const state = await getLevelState();
     const today = new Date().toISOString().split('T')[0];
     
+    console.log('[levelService] markTodayReportGenerated called');
+    
     state.lastDailyReportDate = today;
     state.exp += 50;
     state.totalExp += 50;
@@ -237,8 +253,13 @@ export const markTodayReportGenerated = async (): Promise<UserLevelState> => {
         state.level += 1;
     }
     
+    let syncSuccess = false;
     if (userId) {
-        await syncLevelToDB(userId, state);
+        syncSuccess = await syncLevelToDB(userId, state);
+        if (!syncSuccess) {
+            console.error('[levelService] Failed to sync report mark to DB');
+            throw new Error('Failed to sync level to database');
+        }
     } else {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
@@ -252,12 +273,18 @@ export const instantUpgrade = async (targetLevel: number): Promise<UserLevelStat
     const state = await getLevelState();
     const targetConfig = LEVEL_CONFIGS.find(l => l.level === targetLevel);
     
+    console.log('[levelService] instantUpgrade called:', { targetLevel });
+    
     if (targetConfig) {
         state.level = targetLevel;
         state.exp = Math.max(state.exp, targetConfig.minExp);
         
         if (userId) {
-            await syncLevelToDB(userId, state);
+            const syncSuccess = await syncLevelToDB(userId, state);
+            if (!syncSuccess) {
+                console.error('[levelService] Failed to sync instant upgrade to DB');
+                throw new Error('Failed to sync level to database');
+            }
         } else {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         }
@@ -277,5 +304,6 @@ export const initUserLevel = async (userId: string): Promise<void> => {
         lastDailyReportDate: ''
     };
     
+    console.log('[levelService] initUserLevel called for userId:', userId);
     await syncLevelToDB(userId, initialState);
 };

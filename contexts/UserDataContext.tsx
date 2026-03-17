@@ -115,6 +115,7 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
             ]);
             setBalance(b);
             setTransactions(txs);
+            console.log('[UserDataContext] refreshBalance completed:', { balance: b, transactionsCount: txs.length });
         } catch (e) {
             console.error('[UserDataContext] refreshBalance error:', e);
         } finally {
@@ -143,6 +144,7 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
             ]);
             setLevelState(state);
             setLevelConfig(config);
+            console.log('[UserDataContext] refreshLevel completed:', state);
         } catch (e) {
             console.error('[UserDataContext] refreshLevel error:', e);
         } finally {
@@ -187,37 +189,53 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
     // ============== 数据修改函数 ==============
     
     const handleAddExp = useCallback(async (amount: number) => {
+        console.log('[UserDataContext] handleAddExp called with amount:', amount);
         const state = await levelAddExp(amount);
         setLevelState(state);
         const config = LEVEL_CONFIGS.find(l => l.level === state.level) || LEVEL_CONFIGS[0];
         setLevelConfig(config);
+        console.log('[UserDataContext] handleAddExp completed:', state);
         return state;
     }, []);
     
     const handleAddBalance = useCallback(async (coins: number, desc: string, type?: Transaction['type']) => {
-        const newBalance = await walletAddBalance(coins, desc, type);
-        setBalance(newBalance);
+        console.log('[UserDataContext] handleAddBalance called:', { coins, desc, type });
         
-        // 充值时同时给予灵力：1 天机币 = 10 灵力
+        // 1. 先更新天机币（这个函数内部会处理数据库同步）
+        const newBalance = await walletAddBalance(coins, desc, type);
+        
+        // 2. 立即从数据库重新读取余额，确保数据一致性
+        const [refreshedBalance, refreshedTxs] = await Promise.all([
+            getBalance(),
+            getTransactions()
+        ]);
+        setBalance(refreshedBalance);
+        setTransactions(refreshedTxs);
+        
+        // 3. 充值时同时给予灵力：1 天机币 = 10 灵力
         if (type === 'RECHARGE') {
             const expAmount = coins * 10;
+            console.log('[UserDataContext] Adding exp for recharge:', expAmount);
             await handleAddExp(expAmount);
         }
         
-        // 刷新交易记录
-        const txs = await getTransactions();
-        setTransactions(txs);
-        return newBalance;
+        console.log('[UserDataContext] handleAddBalance completed');
+        return refreshedBalance;
     }, [handleAddExp]);
     
     const handleDeductBalance = useCallback(async (amount: number, desc: string) => {
+        console.log('[UserDataContext] handleDeductBalance called:', { amount, desc });
         const result = await walletDeductBalance(amount, desc);
         if (result.success) {
-            setBalance(result.newBalance);
-            // 刷新交易记录
-            const txs = await getTransactions();
-            setTransactions(txs);
+            // 立即从数据库重新读取，确保数据一致性
+            const [refreshedBalance, refreshedTxs] = await Promise.all([
+                getBalance(),
+                getTransactions()
+            ]);
+            setBalance(refreshedBalance);
+            setTransactions(refreshedTxs);
         }
+        console.log('[UserDataContext] handleDeductBalance completed:', result);
         return result;
     }, []);
     
@@ -357,7 +375,6 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
 };
 
 // ============== Hook ==============
-
 export const useUserData = (): UserDataContextValue => {
     const context = useContext(UserDataContext);
     if (!context) {
@@ -367,7 +384,6 @@ export const useUserData = (): UserDataContextValue => {
 };
 
 // ============== 可选 Hook（用于可能不在 Provider 内的组件）=============
-
 export const useUserDataOptional = (): UserDataContextValue | undefined => {
     return useContext(UserDataContext);
 };
