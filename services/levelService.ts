@@ -47,7 +47,8 @@ const getLevelFromDB = async (userId: string): Promise<UserLevelState | null> =>
 const getLevelFromLocal = (): UserLevelState => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) {
-        return INITIAL_STATE;
+        // 返回新对象，避免修改 INITIAL_STATE 常量
+        return { ...INITIAL_STATE };
     }
     const parsed = JSON.parse(stored);
     return {

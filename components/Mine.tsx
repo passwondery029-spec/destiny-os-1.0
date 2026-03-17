@@ -31,6 +31,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
         transactions,
         levelState,
         levelConfig,
+        isLoadingLevel,
         addBalance,
         refreshBalance
     } = useUserData();
@@ -55,6 +56,9 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
     // Level State from Context
     const currentConfig = levelConfig;
     const nextConfig = LEVEL_CONFIGS.find(l => l.level === currentConfig.level + 1);
+    
+    // 安全获取灵力值（防止 NaN 和 undefined）
+    const safeExp = (levelState?.exp !== undefined && !Number.isNaN(levelState.exp)) ? levelState.exp : 0;
 
     // 初始化表单数据
     useEffect(() => {
@@ -226,7 +230,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                         </p>
                     </div>
                     <div className="text-right flex flex-col items-end">
-                        <p className="text-2xl font-bold text-white tabular-nums">{levelState.exp}</p>
+                        <p className="text-2xl font-bold text-white tabular-nums">{safeExp}</p>
                         <p className="text-stone-500 text-[10px] mb-1">当前灵力值</p>
                         <button
                             onClick={() => setActiveModal('LEVEL_PRIVILEGES')}
@@ -242,7 +246,7 @@ const Mine: React.FC<MineProps> = ({ session: propSession }) => {
                         <div className="w-full h-2 bg-stone-700 rounded-full overflow-hidden mb-2">
                             <div
                                 className="h-full bg-gradient-to-r from-[#B8860B] to-yellow-600"
-                                style={{ width: `${Math.min(100, (levelState.exp / nextConfig.minExp) * 100)}%` }}
+                                style={{ width: `${Math.min(100, (safeExp / nextConfig.minExp) * 100)}%` }}
                             ></div>
                         </div>
                         <div className="flex justify-between text-[10px] text-stone-400">
